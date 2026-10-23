@@ -1,0 +1,131 @@
+from dataclasses import replace
+from io import BytesIO
+import pandas as pd
+import pytest
+from openpyxl import load_workbook
+from valuation.data import demo_company, normalize, ticker_symbol, peer_record
+from valuation.model import Assumptions, BASE_FIELDS, base_check, forecast, dcf, sensitivity, default_drivers, relative_values
+from valuation.export import workbook
+
+
+@pytest.fixture
+def case():
+    c = demo_company()
+    b = c["historical"].loc[list(BASE_FIELDS)].iloc[:,-1].to_dict()
+    return c,b,Assumptions()
+
+
+def test_statements_balance_and_cash_flows_reconcile(case):
+    _,b,a = case
+    f = forecast(b,a,2026)
+    assert abs(base_check(b)) < 1e-8
+    assert f.balance_check.abs().max() < 1e-8
+    assert (f.cfo+f.cfi+f.cff-f.cash_change).abs().max() < 1e-8
+    opening = b["equity"]
+    for _,r in f.iterrows():
+        assert r.equity == pytest.approx(opening+r.net_income-r.dividends)
+        opening = r.equity
+
+
+def test_cash_shortfall_is_explicitly_financed(case):
+    _,b,a = case
+    f = forecast(b,replace(a,capex_pct=.5,depreciation_rate=.04),2026)
+    assert f.funding.sum() > 0
+    assert (f.cash-f.revenue*a.minimum_cash_pct).min() >= -1e-8
+    assert f.balance_check.abs().max() < 1e-8
+
+
+def test_repayment_cannot_exceed_debt(case):
+    _,b,a = case
+    f = forecast(b,replace(a,annual_repayment=100000),2026)
+    assert f.iloc[0].repayment == b["short_debt"]+b["long_debt"]
+    assert f.short_debt.min() >= 0 and f.long_debt.min() >= 0
+    assert f.balance_check.abs().max() < 1e-8
+
+
+def test_dcf_discount_direction_and_equity_bridge(case):
+    _,b,a = case
+    f = forecast(b,a,2026)
+    low = dcf(f,b,replace(a,wacc_override=.10),8)
+    high = dcf(f,b,replace(a,wacc_override=.14),8)
+    assert low["price"] > high["price"]
+    assert low["equity_value"] == pytest.approx(low["enterprise_value"]+b["cash"]-b["short_debt"]-b["long_debt"])
+    assert low["price"] == pytest.approx(low["equity_value"]/8)
+    doubled = dcf(f,b,replace(a,wacc_override=.10),16)
+    assert doubled["price"] == pytest.approx(low["price"]/2)
+
+
+def test_terminal_reinvestment_is_growth_over_roic(case):
+    _,b,a = case
+    f = forecast(b,a,2026)
+    r = dcf(f,b,a,8)
+    expected = f.iloc[-1].ebit*(1-a.tax_rate)*(1+a.terminal_growth)*(1-a.terminal_growth/a.terminal_roic)
+    assert r["terminal_fcff"] == pytest.approx(expected)
+
+
+def test_rejects_bad_inputs(case):
+    _,b,a = case
+    with pytest.raises(ValueError,match="balance"):
+        forecast(b|{"cash":0},a,2026)
+    f = forecast(b,a,2026)
+    with pytest.raises(ValueError,match="WACC"):
+        dcf(f,b,replace(a,wacc_override=.02),8)
+    with pytest.raises(ValueError,match="ROIC"):
+        dcf(f,b,replace(a,terminal_roic=.01),8)
+    with pytest.raises(ValueError,match="Shares"):
+        dcf(f,b,a,0)
+    d = default_drivers(a,2026)
+    d.loc[0,"Growth %"] = -100
+    with pytest.raises(ValueError,match="Growth"):
+        forecast(b,a,2026,d)
+
+
+def test_relative_uses_positive_denominators_and_equity_bridge():
+    peers = [dict(ev=100,market_cap=80,revenue=50,ebitda=10,ebit=8,net_income=5),
+             dict(ev=200,market_cap=160,revenue=100,ebitda=-10,ebit=16,net_income=-5)]
+    target = dict(revenue=100,ebitda=20,ebit=16,net_income=10)
+    r = relative_values(peers,target,10,30,10).query("Case == 'Median'").set_index("Multiple")
+    assert r.loc["EV / EBITDA","Peers used"] == 1
+    assert r.loc["EV / Revenue","Implied price (IDR)"] == pytest.approx(18)
+    assert r.loc["P / E","Implied price (IDR)"] == pytest.approx(16)
+
+
+def test_missing_data_is_not_zero():
+    date = pd.Timestamp("2025-12-31")
+    income = pd.DataFrame({date:{"TotalRevenue":100e9,"OperatingIncome":20e9}})
+    balance = pd.DataFrame({date:{"TotalAssets":80e9}})
+    cf = pd.DataFrame({date:{"OperatingCashFlow":15e9}})
+    h,p = normalize(income,balance,cf)
+    assert h.loc["revenue"].iloc[0] == 100
+    assert pd.isna(h.loc["inventory"].iloc[0])
+    assert "Missing" in p["2025-12-31:inventory"]
+
+
+def test_no_mixed_fiscal_dates(case):
+    c,_,_ = case
+    with pytest.raises(ValueError,match="matching fiscal"):
+        peer_record(c,"2020-12-31",1)
+    assert ticker_symbol(" tlkm ") == "TLKM.JK"
+    with pytest.raises(ValueError):
+        ticker_symbol("AAPL.US")
+
+
+def test_direct_cashflow_label_and_empty_placeholder_period():
+    date,empty = pd.Timestamp("2025-12-31"),pd.Timestamp("2024-12-31")
+    income = pd.DataFrame({date:{"TotalRevenue":100e9},empty:{"TotalRevenue":None}})
+    balance = pd.DataFrame({date:{"TotalAssets":80e9},empty:{"TotalAssets":None}})
+    cf = pd.DataFrame({date:{"CashFlowsfromusedinOperatingActivitiesDirect":15e9},empty:{"CashFlowsfromusedinOperatingActivitiesDirect":None}})
+    h,_ = normalize(income,balance,cf)
+    assert list(h.columns) == ["2025-12-31"]
+    assert h.loc["cfo","2025-12-31"] == 15
+
+
+def test_excel_contains_forecast_and_sensitivity(case):
+    c,b,a = case
+    f = forecast(b,a,2026)
+    r = dcf(f,b,a,8)
+    output = workbook(c,c["historical"],b,a,default_drivers(a,2026),f,r,sensitivity(f,b,a,8),[],pd.DataFrame())
+    book = load_workbook(BytesIO(output))
+    assert "Forecast IDR bn" in book.sheetnames
+    assert "Sensitivity IDR" in book.sheetnames
+    assert book["Forecast IDR bn"].max_column == 11
