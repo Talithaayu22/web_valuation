@@ -2,8 +2,8 @@
 
 Annual, year-end FCFF model. Interest uses opening debt (avoids circularity).
 Other balance sheet buckets are held constant. Cash shortfalls are funded by
-explicit revolver draws; cash surpluses are retained. No interest income, NOL
-schedule, new share issuance, or future acquisitions are assumed.
+explicit revolver draws; cash surpluses are retained.
+Aligned with Aswath Damodaran's DCF (FCFF) and Relative Valuation framework.
 """
 from dataclasses import dataclass, asdict
 import math
@@ -50,10 +50,11 @@ class Assumptions:
     terminal_roic: float = .15
     other_claims: float = 0
     nonoperating_assets: float = 0
+    country_risk_premium: float = 0.0
 
     @property
     def cost_of_equity(self):
-        return self.risk_free + self.beta * self.equity_premium
+        return self.risk_free + self.beta * self.equity_premium + self.country_risk_premium
 
     @property
     def wacc(self):
@@ -77,6 +78,77 @@ def default_drivers(a, first_year):
     })
 
 
+def infer_assumptions(historical, b, company=None):
+    """Derives baseline assumptions from historical data aligned with Damodaran methodology."""
+    a = Assumptions()
+    r = b.get("revenue", 0.0)
+    if r > 0:
+        # Operating margins
+        ebit_val = b.get("ebit") if b.get("ebit") is not None else (r - b.get("cogs", 0) - b.get("opex", 0) - b.get("da", 0))
+        a.ebit_margin = max(-0.20, min(0.60, ebit_val / r))
+        a.mature_margin = a.ebit_margin
+        a.gross_margin = max(0.05, min(0.95, 1.0 - (b.get("cogs", 0) / r)))
+
+        # Working capital days
+        a.ar_days = max(0.0, min(365.0, (b.get("ar", 0) / r) * 365.0))
+        cogs = b.get("cogs", 0.0)
+        a.inventory_days = max(0.0, min(365.0, (b.get("inventory", 0) / cogs) * 365.0)) if cogs > 0 else 0.0
+        a.ap_days = max(0.0, min(365.0, (b.get("ap", 0) / cogs) * 365.0)) if cogs > 0 else 0.0
+
+        # Residual working capital ratios
+        a.other_ca_pct = max(0.0, min(0.50, b.get("other_ca", 0) / r))
+        a.other_cl_pct = max(0.0, min(0.50, b.get("other_cl", 0) / r))
+
+        # Reinvestment capex
+        reported_capex = historical.iloc[:, -1].get("capex") if historical is not None and not historical.empty else None
+        if reported_capex is not None and pd.notna(reported_capex):
+            a.capex_pct = max(0.01, min(0.50, float(reported_capex) / r))
+
+        # Revenue growth from historical CAGR
+        if historical is not None and not historical.empty and "revenue" in historical.index:
+            s = historical.loc["revenue"].dropna()
+            if len(s) >= 4 and s.iloc[-4] > 0 and s.iloc[-1] > 0:
+                cagr3 = (float(s.iloc[-1]) / float(s.iloc[-4])) ** (1.0 / 3.0) - 1.0
+                a.growth = max(-0.15, min(0.35, cagr3))
+
+    # Depreciation rate on PPE
+    if b.get("ppe", 0) > 0:
+        a.depreciation_rate = max(0.01, min(0.50, b.get("da", 0) / b["ppe"]))
+
+    # Loose ends per Damodaran Week 2 Slide 63
+    minority = historical.iloc[:, -1].get("minority_interest") if historical is not None and not historical.empty else None
+    if minority is not None and pd.notna(minority):
+        a.other_claims = max(0.0, float(minority))
+
+    nonop = historical.iloc[:, -1].get("nonoperating_assets") if historical is not None and not historical.empty else None
+    if nonop is not None and pd.notna(nonop):
+        a.nonoperating_assets = max(0.0, float(nonop))
+
+    # Market-value capital structure weights per Damodaran Week 2 Slide 33 & 67
+    tot_debt = b.get("short_debt", 0.0) + b.get("long_debt", 0.0)
+    if company is not None and company.get("price") and company.get("shares"):
+        mkt_cap = (float(company["price"]) * float(company["shares"])) / 1e9
+        if mkt_cap > 0 and tot_debt >= 0:
+            a.debt_weight = max(0.0, min(0.90, tot_debt / (tot_debt + mkt_cap)))
+
+    # Borrowing cost from effective interest rate
+    if tot_debt > 0 and b.get("interest", 0) > 0:
+        eff_debt_rate = b["interest"] / tot_debt
+        if 0.04 <= eff_debt_rate <= 0.20:
+            a.debt_rate = round(eff_debt_rate, 4)
+
+    # Scrape Beta directly from yfinance
+    if company is not None and company.get("beta") is not None:
+        raw_beta = float(company["beta"])
+        if math.isfinite(raw_beta):
+            a.beta = round(raw_beta, 4)
+
+    # Terminal state: Year 10 mature growth converges to terminal growth
+    a.mature_growth = a.terminal_growth
+
+    return a
+
+
 def forecast(b, a, first_year, drivers=None):
     if not all(math.isfinite(float(b[k])) for k in BASE_FIELDS):
         raise ValueError("Every opening financial input must be a finite number.")
@@ -98,8 +170,12 @@ def forecast(b, a, first_year, drivers=None):
         raise ValueError("Annual assumptions cannot be blank or non-finite.")
     if (d["Growth %"] <= -100).any() or (d["Capex / sales %"] < 0).any():
         raise ValueError("Growth must exceed −100% and capex cannot be negative.")
+
     p = dict(b)
     p["nwc"] = b["ar"] + b["inventory"] + b["other_ca"] - b["ap"] - b["other_cl"]
+    p["invested_capital"] = b["ppe"] + p["nwc"] + b["other_assets"]
+    nol = 0.0
+
     result = []
     for _, row in d.iterrows():
         revenue = p["revenue"] * (1 + row["Growth %"] / 100)
@@ -107,19 +183,41 @@ def forecast(b, a, first_year, drivers=None):
         ebit = revenue * row["EBIT margin %"] / 100
         capex = revenue * row["Capex / sales %"] / 100
         da = min(p["ppe"] + capex, p["ppe"] * a.depreciation_rate)
+
+        # Low-OpEx Bull Scenario Resilience:
+        # If operating margin increases (cost efficiency), floor OpEx at 0 and absorb in COGS rather than crashing
         opex = revenue - cogs - da - ebit
         if opex < -1e-6:
-            raise ValueError("Gross margin is too low for the requested EBIT margin and depreciation. Increase gross margin or lower EBIT margin.")
+            if ebit + da <= revenue * 0.999:
+                opex = 0.0
+                cogs = max(0.0, revenue - da - ebit)
+            else:
+                raise ValueError("Gross margin is too low for the requested EBIT margin and depreciation. Increase gross margin or lower EBIT margin.")
+
         opening_debt = p["short_debt"] + p["long_debt"]
         interest = opening_debt * a.debt_rate
-        tax = max(0, ebit - interest) * a.tax_rate
+
+        # Damodaran Operating Tax & Net Operating Loss (NOL) carryforward (Week 2 Slide 42)
+        if ebit <= 0:
+            taxable_ebit = 0.0
+            nol += abs(ebit)
+        else:
+            taxable_ebit = max(0.0, ebit - nol)
+            nol = max(0.0, nol - ebit)
+        operating_tax = taxable_ebit * a.tax_rate
+        nopat = ebit - operating_tax
+
+        # Financial statement net income tax (interest deductible)
+        tax = max(0.0, ebit - interest) * a.tax_rate
         net_income = ebit - interest - tax
+
         ar = revenue * a.ar_days / 365
         inventory = cogs * a.inventory_days / 365
         ap = cogs * a.ap_days / 365
         other_ca, other_cl = revenue * a.other_ca_pct, revenue * a.other_cl_pct
         nwc = ar + inventory + other_ca - ap - other_cl
         delta_nwc = nwc - p["nwc"]
+
         cfo = net_income + da - delta_nwc
         dividends = max(0, net_income) * a.dividend_payout
         repayment = min(opening_debt, a.annual_repayment)
@@ -133,16 +231,26 @@ def forecast(b, a, first_year, drivers=None):
         equity = p["equity"] + net_income - dividends
         assets = cash + ar + inventory + other_ca + ppe + b["other_assets"]
         liabilities = ap + other_cl + short_debt + long_debt + b["other_liabilities"]
-        f = dict(year=int(row["Year"]), revenue=revenue, cogs=cogs, opex=opex, da=da,
-                 ebitda=ebit + da, ebit=ebit, interest=interest, tax=tax, net_income=net_income,
-                 cash=cash, ar=ar, inventory=inventory, other_ca=other_ca, ppe=ppe,
-                 other_assets=b["other_assets"], ap=ap, other_cl=other_cl, short_debt=short_debt,
-                 long_debt=long_debt, other_liabilities=b["other_liabilities"], equity=equity,
-                 assets=assets, liabilities=liabilities, nwc=nwc, delta_nwc=delta_nwc,
-                 capex=capex, cfo=cfo, cfi=-capex, cff=funding-repayment-dividends,
-                 funding=funding, repayment=repayment, dividends=dividends,
-                 cash_change=cash-p["cash"], balance_check=assets-liabilities-equity,
-                 fcff=ebit * (1-a.tax_rate) + da - capex - delta_nwc)
+
+        # Damodaran Reinvestment & Invested Capital (Week 2 Slide 41 & 48)
+        reinvestment = (capex - da) + delta_nwc
+        invested_capital = ppe + nwc + b["other_assets"]
+        opening_ic = p["invested_capital"]
+        roic = (nopat / opening_ic) if opening_ic > 0 else float("nan")
+
+        f = dict(
+            year=int(row["Year"]), revenue=revenue, cogs=cogs, opex=opex, da=da,
+            ebitda=ebit + da, ebit=ebit, nopat=nopat, interest=interest, tax=tax, net_income=net_income,
+            cash=cash, ar=ar, inventory=inventory, other_ca=other_ca, ppe=ppe,
+            other_assets=b["other_assets"], ap=ap, other_cl=other_cl, short_debt=short_debt,
+            long_debt=long_debt, other_liabilities=b["other_liabilities"], equity=equity,
+            assets=assets, liabilities=liabilities, nwc=nwc, delta_nwc=delta_nwc,
+            capex=capex, reinvestment=reinvestment, invested_capital=invested_capital, roic=roic,
+            cfo=cfo, cfi=-capex, cff=funding - repayment - dividends,
+            funding=funding, repayment=repayment, dividends=dividends,
+            cash_change=cash - p["cash"], balance_check=assets - liabilities - equity,
+            fcff=nopat + da - capex - delta_nwc
+        )
         result.append(f)
         p = f
     return pd.DataFrame(result).set_index("year")
@@ -156,56 +264,76 @@ def dcf(f, b, a, shares):
         raise ValueError("WACC must exceed terminal growth, and terminal growth cannot be negative.")
     if a.terminal_roic <= g:
         raise ValueError("Terminal ROIC must exceed terminal growth to support positive terminal cash flow.")
-    terminal_nopat = float(f.iloc[-1].ebit) * (1-a.tax_rate) * (1+g)
+
+    terminal_nopat = float(f.iloc[-1].ebit) * (1 - a.tax_rate) * (1 + g)
     if terminal_nopat <= 0:
         raise ValueError("Year 10 operating profit must be positive for this terminal-value method.")
-    # Sustainable terminal reinvestment = growth / ROIC, rather than extrapolating
-    # a potentially unsustainable final-year capital expenditure assumption.
-    terminal_fcff = terminal_nopat * (1-g/a.terminal_roic)
-    terminal_value = terminal_fcff / (w-g)
-    pv_flows = sum(float(v)/(1+w)**i for i,v in enumerate(f.fcff, 1))
-    pv_terminal = terminal_value/(1+w)**len(f)
+
+    # Damodaran Sustainable Terminal Reinvestment = g / ROIC (Week 2 Slide 55)
+    terminal_reinvestment_rate = (g / a.terminal_roic) if a.terminal_roic > 0 else 0.0
+    terminal_fcff = terminal_nopat * (1 - terminal_reinvestment_rate)
+    terminal_value = terminal_fcff / (w - g)
+    pv_flows = sum(float(v) / (1 + w) ** i for i, v in enumerate(f.fcff, 1))
+    pv_terminal = terminal_value / (1 + w) ** len(f)
     ev = pv_flows + pv_terminal
+
+    # Damodaran Enterprise-to-Equity Value Bridge (Week 2 Slide 63)
     eq = ev + b["cash"] + a.nonoperating_assets - b["short_debt"] - b["long_debt"] - a.other_claims
-    return dict(wacc=w, terminal_fcff=terminal_fcff, terminal_value=terminal_value,
-                pv_flows=pv_flows, pv_terminal=pv_terminal, enterprise_value=ev,
-                equity_value=eq, price=eq/shares, terminal_share=pv_terminal/ev if ev else 0)
+    y10_ebitda = float(f.iloc[-1].ebitda)
+
+    return dict(
+        wacc=w, terminal_nopat=terminal_nopat, terminal_reinvestment_rate=terminal_reinvestment_rate,
+        terminal_fcff=terminal_fcff, terminal_value=terminal_value,
+        pv_flows=pv_flows, pv_terminal=pv_terminal, enterprise_value=ev,
+        equity_value=eq, price=eq / shares, terminal_share=pv_terminal / ev if ev else 0,
+        implied_exit_ev_ebitda=(terminal_value / y10_ebitda) if y10_ebitda > 0 else float("nan")
+    )
 
 
 def sensitivity(f, b, a, shares):
     from dataclasses import replace
-    ws = [a.wacc + x for x in (-.02,-.01,0,.01,.02)]
-    gs = [max(0,a.terminal_growth + x) for x in (-.01,-.005,0,.005,.01)]
+    ws = [a.wacc + x for x in (-.02, -.01, 0, .01, .02)]
+    gs = [max(0, a.terminal_growth + x) for x in (-.01, -.005, 0, .005, .01)]
     grid = []
     for w in ws:
         vals = []
         for g in gs:
             try:
-                vals.append(dcf(f,b,replace(a,wacc_override=w,terminal_growth=g),shares)["price"])
+                vals.append(dcf(f, b, replace(a, wacc_override=w, terminal_growth=g), shares)["price"])
             except ValueError:
                 vals.append(float("nan"))
         grid.append(vals)
-    return pd.DataFrame(grid,index=[f"{w:.2%}" for w in ws],columns=[f"{g:.2%}" for g in gs])
+    return pd.DataFrame(grid, index=[f"{w:.2%}" for w in ws], columns=[f"{g:.2%}" for g in gs])
 
 
 def relative_values(peers, target, cash, debt, shares, other_claims=0, nonoperating_assets=0):
     """Peer rows and target denominators must use the same annual period basis.
     Enterprise multiples exclude negative EV and non-positive denominators.
+    Aligned with Damodaran Week 4 Slide 7 & 25 (EV/Rev, EV/EBITDA, EV/EBIT, P/E, P/BV).
     """
     if shares <= 0:
         raise ValueError("Shares must be positive.")
     rows = []
-    for label, metric, numerator in [("EV / Revenue","revenue","ev"),("EV / EBITDA","ebitda","ev"),
-                                     ("EV / EBIT","ebit","ev"),("P / E","net_income","market_cap")]:
+    multiples_spec = [
+        ("EV / Revenue", "revenue", "ev"),
+        ("EV / EBITDA", "ebitda", "ev"),
+        ("EV / EBIT", "ebit", "ev"),
+        ("P / E", "net_income", "market_cap"),
+    ]
+    # Add P/BV if book_equity is provided in target and peers
+    if "book_equity" in target and target["book_equity"] is not None and target["book_equity"] > 0:
+        multiples_spec.append(("P / BV", "book_equity", "market_cap"))
+
+    for label, metric, numerator in multiples_spec:
         multiples = []
         for p in peers:
             den, num = p.get(metric), p.get(numerator)
             if den is not None and num is not None and math.isfinite(den) and math.isfinite(num) and den > 0 and num > 0:
-                multiples.append(num/den)
-        for percentile, name in [(25,"Lower quartile"),(50,"Median"),(75,"Upper quartile")]:
-            mult = float(np.percentile(multiples,percentile)) if multiples else float("nan")
+                multiples.append(num / den)
+        for percentile, name in [(25, "Lower quartile"), (50, "Median"), (75, "Upper quartile")]:
+            mult = float(np.percentile(multiples, percentile)) if multiples else float("nan")
             denominator = target.get(metric)
             value = mult * denominator if denominator is not None and denominator > 0 else float("nan")
             equity = value + cash + nonoperating_assets - debt - other_claims if numerator == "ev" else value
-            rows.append({"Multiple":label,"Case":name,"Peers used":len(multiples),"Peer multiple":mult,"Implied price (IDR)":equity/shares})
+            rows.append({"Multiple": label, "Case": name, "Peers used": len(multiples), "Peer multiple": mult, "Implied price (IDR)": equity / shares})
     return pd.DataFrame(rows)

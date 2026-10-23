@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from openpyxl import load_workbook
 from valuation.data import demo_company, normalize, ticker_symbol, peer_record
-from valuation.model import Assumptions, BASE_FIELDS, base_check, forecast, dcf, sensitivity, default_drivers, relative_values
+from valuation.model import Assumptions, BASE_FIELDS, base_check, forecast, dcf, sensitivity, default_drivers, relative_values, infer_assumptions
 from valuation.export import workbook
 
 
@@ -129,3 +129,43 @@ def test_excel_contains_forecast_and_sensitivity(case):
     assert "Forecast IDR bn" in book.sheetnames
     assert "Sensitivity IDR" in book.sheetnames
     assert book["Forecast IDR bn"].max_column == 11
+
+
+def test_low_opex_bull_scenario_does_not_crash():
+    # Low-OpEx profile (distribution model where opex is only ~2% of revenue)
+    base = dict(revenue=46000., cogs=41900., opex=980., da=48., interest=280., tax=675., net_income=2400.,
+                cash=6400., ar=9500., inventory=6600., other_ca=760., ppe=6800., other_assets=6400.,
+                ap=12000., other_cl=3400., short_debt=1800., long_debt=4200., other_liabilities=1400., equity=13660.)
+    a = Assumptions(growth=0.08, mature_growth=0.04, ebit_margin=0.066, mature_margin=0.066, gross_margin=0.089,
+                    ar_days=75., inventory_days=57., ap_days=104., capex_pct=0.023, depreciation_rate=0.007)
+    # Test Bull scenario (+2% EBIT margin shift)
+    drivers = default_drivers(a, 2026)
+    drivers["Growth %"] += 2.0
+    drivers["EBIT margin %"] += 2.0
+    f = forecast(base, a, 2026, drivers)
+    assert not f.empty
+    assert (f.opex >= 0).all()
+    assert (f.fcff > 0).all()
+    r = dcf(f, base, a, 19.7)
+    assert r["price"] > 0
+
+
+def test_infer_assumptions_uses_yfinance_beta_and_market_debt_weight(case):
+    c, b, _ = case
+    company_meta = dict(price=1400., shares=20e9, beta=-0.25)
+    inferred = infer_assumptions(c["historical"], b, company_meta)
+    assert inferred.beta == -0.25
+    # Total debt = short_debt (300) + long_debt (1700) = 2000 bn
+    # Market Cap = 1400 * 20e9 / 1e9 = 28000 bn
+    # Debt weight = 2000 / (2000 + 28000) = 2000 / 30000 = ~6.67%
+    assert inferred.debt_weight == pytest.approx(2000. / 30000., abs=0.005)
+
+
+def test_relative_values_with_pbv():
+    peers = [dict(ev=100, market_cap=80, revenue=50, ebitda=10, ebit=8, net_income=5, book_equity=40),
+             dict(ev=200, market_cap=160, revenue=100, ebitda=20, ebit=16, net_income=10, book_equity=80)]
+    target = dict(revenue=100, ebitda=20, ebit=16, net_income=10, book_equity=50)
+    r = relative_values(peers, target, 10, 30, 10).query("Case == 'Median'").set_index("Multiple")
+    assert "P / BV" in r.index
+    assert r.loc["P / BV", "Peer multiple"] == pytest.approx(2.0)
+    assert r.loc["P / BV", "Implied price (IDR)"] == pytest.approx(10.0)
