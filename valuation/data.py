@@ -283,8 +283,8 @@ IDX_INDUSTRY_PEERS = {
     "Drug Manufacturers - General": ["KLBF", "SIDO", "TSPC", "KAEF"],
     # Cement & Building
     "Building Materials": ["SMGR", "INTP", "SMBR"],
-    # Industrial Conglomerates / Heavy Equipment & Automotive
-    "Industrial Conglomerates": ["ASII", "UNTR", "AUTO", "SMSM", "IMAS"],
+    # Industrial Conglomerates / Heavy Equipment
+    "Industrial Conglomerates": ["ASII", "UNTR"],
     # Telecom
     "Telecom Services": ["TLKM", "ISAT", "EXCL"],
 }
