@@ -295,3 +295,34 @@ def test_investment_recommendation_hurdles():
     sell = investment_recommendation(reference_price=1000.0, blended_price=800.0, hurdle_rate=0.15)
     assert sell['rating'] == 'SELL / UNDERWEIGHT'
     assert sell['upside'] == pytest.approx(-0.20)
+
+
+def test_sustainable_growth_and_capex_normalization(case):
+    _, b, _ = case
+    # Case A: Post-peak commodity contraction (revenue drops from 150k to 35k)
+    hist_cyclical = pd.DataFrame({
+        "2022-12-31": {"revenue": 150000.0, "capex": 5000.0},
+        "2023-12-31": {"revenue": 45000.0, "capex": 4000.0},
+        "2024-12-31": {"revenue": 40000.0, "capex": 3800.0},
+        "2025-12-31": {"revenue": 35000.0, "capex": 15000.0},
+    })
+    b_cyclical = dict(b, revenue=35000.0)
+    inferred_cyclical = infer_assumptions(hist_cyclical, b_cyclical)
+    # Negative CAGR (-38%) is anchored to Indonesian economic baseline 3.5%, not -15%
+    assert inferred_cyclical.growth == pytest.approx(0.035)
+    # Capex uses multi-year median (~9.5% - 10.8%), not the single-year 42.8% outlier
+    assert inferred_cyclical.capex_pct < 0.20
+    assert inferred_cyclical.capex_pct > 0.05
+
+    # Case B: Normal growing company (revenue grows from 10k to 15k)
+    hist_growing = pd.DataFrame({
+        "2022-12-31": {"revenue": 10000.0, "capex": 600.0},
+        "2023-12-31": {"revenue": 11500.0, "capex": 700.0},
+        "2024-12-31": {"revenue": 13000.0, "capex": 750.0},
+        "2025-12-31": {"revenue": 15000.0, "capex": 900.0},
+    })
+    b_growing = dict(b, revenue=15000.0)
+    inferred_growing = infer_assumptions(hist_growing, b_growing)
+    # Positive growth is 100% preserved
+    expected_cagr = (15000.0 / 10000.0) ** (1.0 / 3.0) - 1.0
+    assert inferred_growing.growth == pytest.approx(expected_cagr)

@@ -120,17 +120,33 @@ def infer_assumptions(historical, b, company=None):
         a.other_ca_pct = max(0.0, min(0.50, b.get("other_ca", 0) / r))
         a.other_cl_pct = max(0.0, min(0.50, b.get("other_cl", 0) / r))
 
-        # Reinvestment capex
-        reported_capex = historical.iloc[:, -1].get("capex") if historical is not None and not historical.empty else None
-        if reported_capex is not None and pd.notna(reported_capex):
-            a.capex_pct = max(0.01, min(0.50, float(reported_capex) / r))
+        # Reinvestment capex: use multi-year median capex/sales to smooth single-year outlier expansion spikes
+        if historical is not None and not historical.empty and "capex" in historical.index and "revenue" in historical.index:
+            c_s = historical.loc["capex"].dropna()
+            r_s = historical.loc["revenue"].dropna()
+            valid_cols = [col for col in c_s.index if col in r_s.index and r_s[col] > 0]
+            if valid_cols:
+                ratios = [abs(float(c_s[col])) / float(r_s[col]) for col in valid_cols]
+                med_capex = float(np.median(ratios))
+                a.capex_pct = max(0.02, min(0.25, med_capex))
+            else:
+                reported_capex = historical.iloc[:, -1].get("capex")
+                if reported_capex is not None and pd.notna(reported_capex):
+                    a.capex_pct = max(0.01, min(0.35, float(reported_capex) / r))
 
-        # Revenue growth from historical CAGR
+        # Revenue growth: anchor negative cyclical contractions to Indonesian economic baseline (3.5%)
         if historical is not None and not historical.empty and "revenue" in historical.index:
             s = historical.loc["revenue"].dropna()
             if len(s) >= 4 and s.iloc[-4] > 0 and s.iloc[-1] > 0:
                 cagr3 = (float(s.iloc[-1]) / float(s.iloc[-4])) ** (1.0 / 3.0) - 1.0
-                a.growth = max(-0.15, min(0.35, cagr3))
+                if cagr3 < 0:
+                    # Cyclical commodity normalization: anchor baseline initial growth to Indonesian core economic baseline
+                    a.growth = 0.035
+                else:
+                    a.growth = max(0.0, min(0.35, cagr3))
+            elif len(s) >= 2 and s.iloc[-2] > 0 and s.iloc[-1] > 0:
+                yoy = (float(s.iloc[-1]) / float(s.iloc[-2])) - 1.0
+                a.growth = max(0.0, min(0.35, yoy)) if yoy >= 0 else 0.035
 
     # Depreciation rate on PPE
     if b.get("ppe", 0) > 0:
