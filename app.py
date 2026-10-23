@@ -6,10 +6,13 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from valuation.data import CATALOG, BILLION, demo_company, fetch_company, peer_record, ticker_symbol
+from valuation.data import (
+    CATALOG, BILLION, demo_company, peer_record, ticker_symbol,
+    get_default_peers_for_ticker, rank_peers_similarity
+)
 from valuation.model import (
     Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
-    relative_values, infer_assumptions
+    relative_values, infer_assumptions, composite_relative_value, blended_valuation
 )
 from valuation.export import workbook
 from valuation import storage
@@ -192,38 +195,51 @@ with st.sidebar:
         def pct(label, field, lo=0., hi=100.):
             fields[field] = st.number_input(label, min_value=float(lo), max_value=float(hi), value=float(getattr(initial, field) * 100), step=.5, key=key(field)) / 100
 
-        with st.expander("Growth & profitability", expanded=True):
+        with st.expander("01 · Operating model (Operating & reinvestment)", expanded=True):
             pct("Growth · years 1–5 (%)", "growth", -50, 100)
             pct("Growth · year 10 (%)", "mature_growth", -50, 50)
             pct("EBIT margin · years 1–5 (%)", "ebit_margin", -50, 80)
             pct("EBIT margin · year 10 (%)", "mature_margin", -50, 80)
             pct("Gross margin (%)", "gross_margin", 1, 100)
-            pct("Tax rate (%)", "tax_rate", 0, 60)
-        with st.expander("Investment & working capital"):
+            pct("Corporate tax rate (%)", "tax_rate", 0, 60)
             pct("Capex / revenue (%)", "capex_pct", 0, 100)
             pct("D&A / opening fixed assets (%)", "depreciation_rate", 0, 100)
-            for label, field in [("Receivable days", "ar_days"), ("Inventory days", "inventory_days"), ("Payable days", "ap_days")]:
-                fields[field] = st.number_input(label, min_value=0., max_value=730., value=float(getattr(initial, field)), key=key(field))
-            pct("Other operating CA / sales (%)", "other_ca_pct", 0, 100)
-            pct("Other operating CL / sales (%)", "other_cl_pct", 0, 100)
-        with st.expander("Debt, cash & distributions"):
-            pct("Borrowing cost (%)", "debt_rate", 0, 50)
-            fields["annual_repayment"] = st.number_input("Annual debt repayment (IDR bn)", min_value=0., value=float(initial.annual_repayment), key=key("annual_repayment"))
-            pct("Dividend payout (%)", "dividend_payout", 0, 100)
+            pct("Non-cash working capital / revenue (%)", "nwc_pct", -50, 80)
+            st.caption("Damodaran standard: working capital is driven by non-cash NWC % of revenue instead of turnover days.")
             pct("Minimum cash / revenue (%)", "minimum_cash_pct", 0, 100)
-        with st.expander("Discount rate & terminal value", expanded=True):
-            pct("IDR risk-free rate (%)", "risk_free", 0, 30)
+
+            # Preserve background cash roll-forward fields
+            fields["ar_days"] = float(initial.ar_days)
+            fields["inventory_days"] = float(initial.inventory_days)
+            fields["ap_days"] = float(initial.ap_days)
+            fields["other_ca_pct"] = float(initial.other_ca_pct)
+            fields["other_cl_pct"] = float(initial.other_cl_pct)
+            fields["dividend_payout"] = float(initial.dividend_payout)
+            fields["annual_repayment"] = float(initial.annual_repayment)
+
+        with st.expander("02 · Macro & WACC (Capital market assumptions)", expanded=True):
+            pct("Risk-free rate (IndoGov 10Y FR @ Dec 31, 2025) (%)", "risk_free", 0, 30)
+            pct("Mature market ERP (Damodaran NYU Stern) (%)", "mature_equity_premium", 0, 20)
+            pct("Indonesia country risk premium (CRP) (%)", "country_risk_premium", 0, 20)
+            m_erp = fields.get("mature_equity_premium", initial.mature_equity_premium)
+            c_crp = fields.get("country_risk_premium", initial.country_risk_premium)
+            st.caption(f"Total Indonesia ERP: {((m_erp + c_crp) * 100):.2f}% (Mature Base {m_erp*100:.2f}% + CRP {c_crp*100:.2f}%)")
+            fields["equity_premium"] = fields["mature_equity_premium"]
             fields["beta"] = st.number_input("Levered beta", min_value=-2.0, max_value=4., value=float(initial.beta), step=.05, key=key("beta"))
-            pct("Total equity risk premium (%)", "equity_premium", 0, 30)
-            st.caption("Include any country-risk adjustment in this total; do not add it twice.")
+            pct("Pre-tax borrowing cost (%)", "debt_rate", 0, 50)
             pct("Target debt / capital (%)", "debt_weight", 0, 95)
             override = st.checkbox("Override calculated WACC", value=initial.wacc_override is not None, key=key("override"))
             custom_wacc = st.number_input("WACC override (%)", min_value=.1, max_value=60., value=float((initial.wacc_override or initial.wacc) * 100), step=.25, key=key("custom_wacc"))
             fields["wacc_override"] = custom_wacc / 100 if override else None
+
+        with st.expander("03 · Valuation policy (Methods & scenarios)", expanded=True):
             pct("Terminal growth (%)", "terminal_growth", 0, 15)
             pct("Terminal return on invested capital (%)", "terminal_roic", .1, 100)
+            pct("Valuation weight · DCF (%)", "dcf_weight", 0, 100)
+            pct("Valuation weight · Relative (%)", "relative_weight", 0, 100)
+            pct("Scenario shift · Bull/Bear (+/- %)", "scenario_shift", 0, 20)
             fields["other_claims"] = st.number_input("Minorities / other equity claims (IDR bn)", min_value=0., value=float(initial.other_claims), key=key("claims"))
-            st.caption("Starts with reported minority book value where available; review valuation and add other claims.")
+            st.caption("Deducts reported minority interests (NCI) from EV to bridge to Equity Value.")
             fields["nonoperating_assets"] = st.number_input("Additional non-operating assets (IDR bn)", min_value=0., value=float(initial.nonoperating_assets), key=key("nonop"))
         st.form_submit_button("Apply assumptions", type="primary", width="stretch")
     a = Assumptions(**fields)
@@ -263,7 +279,7 @@ except ValueError as exc:
         st.warning(f"DCF unavailable: {exc}. You can still review the financial forecast.")
 
 scenario_rows = []
-for label, shift in [("Bear", -.02), ("Base", 0), ("Bull", .02)]:
+for label, shift in [("Bear", -a.scenario_shift), ("Base", 0), ("Bull", a.scenario_shift)]:
     sd = drivers.copy()
     sd["Growth %"] += shift * 100
     sd["EBIT margin %"] += shift * 100
@@ -274,13 +290,68 @@ for label, shift in [("Bear", -.02), ("Base", 0), ("Bull", .02)]:
     except ValueError:
         scenario_rows.append({"Scenario": label, "Value / share": float("nan"), "Year 10 revenue": float("nan"), "Year 10 EBIT": float("nan"), "WACC": a.wacc})
 
+# Prepare peer context and blended valuation
+target_ebitda = b["revenue"] - b["cogs"] - b["opex"]
+target_profile = dict(
+    symbol=c["symbol"],
+    revenue=b["revenue"],
+    ebitda=target_ebitda,
+    ebitda_margin=(target_ebitda / b["revenue"]) if b["revenue"] > 0 else 0.15,
+    der=((b["short_debt"] + b["long_debt"]) / max(1.0, b.get("equity", 1.0))),
+    industry=c.get("industry", "Unknown"),
+    sector=c.get("sector", "Unknown"),
+)
+default_peer_tickers = ", ".join(get_default_peers_for_ticker(c["symbol"], c.get("industry")))
+
+peer_rows = []
+relative = pd.DataFrame()
+rel_price = float("nan")
+
+active_peers = st.session_state.get("peer_companies", [])
+if active_peers:
+    for pc in active_peers:
+        if st.session_state.get(key(f"include_{pc['symbol']}"), True):
+            pfx = float(pc.get("suggested_fx", 1.0))
+            if pc["financial_currency"] != "IDR":
+                pfx = float(st.session_state.get(key(f"fx_{pc['symbol']}"), pfx))
+            claims = float(st.session_state.get(key(f"claims_{pc['symbol']}"), 0.0))
+            try:
+                if pfx > 0:
+                    peer_rows.append(peer_record(pc, period, pfx, claims if claims != 0 else None))
+            except ValueError:
+                pass
+elif saved.get("peers"):
+    peer_rows = saved["peers"]
+
+if peer_rows and shares > 0:
+    target = dict(
+        revenue=b["revenue"],
+        ebit=b["revenue"] - b["cogs"] - b["opex"] - b["da"],
+        ebitda=target_ebitda,
+        net_income=b["net_income"],
+        book_equity=max(0.0, b.get("equity", 0.0) - a.other_claims),
+    )
+    relative = relative_values(peer_rows, target, b["cash"], b["short_debt"] + b["long_debt"], shares, a.other_claims, a.nonoperating_assets)
+    if len(peer_rows) >= 2:
+        rel_price = composite_relative_value(relative)
+
+dcf_p = result["price"] if result else None
+blended_price = blended_valuation(dcf_p, rel_price, a.dcf_weight, a.relative_weight)
+
 with overview:
-    cols = st.columns(4)
+    cols = st.columns(5)
     cols[0].metric("Reference price", f"Rp {price:,.0f}" if price else "Not available")
-    cols[1].metric("DCF value / share", f"Rp {result['price']:,.0f}" if result else "Check assumptions")
-    upside = result["price"] / price - 1 if result and price else None
-    cols[2].metric("Implied upside / downside", f"{upside:+.1%}" if upside is not None else "—")
-    cols[3].metric("Discount rate", f"{a.wacc:.2%}")
+    cols[1].metric("Blended fair value", f"Rp {blended_price:,.0f}" if pd.notna(blended_price) else (f"Rp {dcf_p:,.0f}" if dcf_p else "Check inputs"))
+    cols[2].metric("DCF value / share", f"Rp {result['price']:,.0f}" if result else "Check assumptions")
+    cols[3].metric("Relative value / share", f"Rp {rel_price:,.0f}" if pd.notna(rel_price) else "Needs >= 2 peers")
+    effective_price = blended_price if pd.notna(blended_price) else dcf_p
+    upside = (effective_price / price - 1) if effective_price and price else None
+    cols[4].metric("Implied upside / downside", f"{upside:+.1%}" if upside is not None else "—")
+
+    if len(peer_rows) >= 2 and pd.notna(rel_price):
+        st.success(f"**Valuation Policy Active**: Blended Fair Value **Rp {blended_price:,.0f} / share** ({a.dcf_weight:.0%} DCF @ Rp {dcf_p:,.0f} + {a.relative_weight:.0%} Relative @ Rp {rel_price:,.0f} across {len(peer_rows)} peers).")
+    elif a.relative_weight > 0:
+        st.info(f"**Valuation Policy**: Configured as {a.dcf_weight:.0%} DCF + {a.relative_weight:.0%} Relative Valuation. Relative valuation requires a minimum of 2 peers (currently {len(peer_rows)}). Open 'Relative valuation' tab to fetch peers; currently defaulting to 100% DCF.")
     l, r = st.columns([1.65, 1])
     with l:
         st.markdown("### The business behind the valuation")
@@ -357,12 +428,10 @@ with dcf_tab:
     else:
         st.warning("Review WACC, terminal growth, terminal ROIC, shares, and year-10 earnings to calculate DCF.")
 
-peer_rows = []
-relative = pd.DataFrame()
 with peers_tab:
     st.subheader("Value in the company of peers")
-    st.caption(f"Annual fiscal-period basis: {period}. All peers must match this exact period. Multiples are calculated from statements and reference prices; forward and TTM figures are not mixed.")
-    peer_text = st.text_input("Peer IDX tickers, separated by commas", placeholder="ICBP, INDF, MYOR", key=key("peer_text"))
+    st.caption(f"Annual fiscal-period basis: {period}. Tickers are pre-filtered by sub-industry ({c.get('industry', 'General')}) and ranked by financial similarity (EBITDA Margin & Debt-to-Equity). Minimum 2 peers required for valuation policy.")
+    peer_text = st.text_input("Peer IDX tickers, separated by commas", value=saved.get("peer_text", default_peer_tickers), key=key("peer_text"))
     if st.button("Fetch peer financials", type="primary", key=key("fetch_peers")):
         companies, errors = [], []
         with st.spinner("Loading peer statements…"):
@@ -381,8 +450,12 @@ with peers_tab:
                     errors.append(f"{value.strip()}: {exc}")
         st.session_state.peer_companies = companies
         st.session_state.peer_errors = errors
+        st.rerun()
+
     for error in st.session_state.get("peer_errors", []):
         st.warning(error)
+
+    tab_peer_rows = []
     for pc in st.session_state.get("peer_companies", []):
         with st.expander(f"{pc['symbol']} · {pc['name']}", expanded=True):
             if not st.checkbox("Include in comparison", value=True, key=key(f"include_{pc['symbol']}")):
@@ -395,28 +468,68 @@ with peers_tab:
             try:
                 if pfx <= 0:
                     raise ValueError("Verify the currency conversion to include this peer.")
-                peer_rows.append(peer_record(pc, period, pfx, claims if claims != 0 else None))
+                tab_peer_rows.append(peer_record(pc, period, pfx, claims if claims != 0 else None))
             except ValueError as exc:
                 st.warning(str(exc))
-    if not st.session_state.get("peer_companies") and saved.get("peers"):
-        peer_rows = saved["peers"]
+
+    if not tab_peer_rows and saved.get("peers"):
+        tab_peer_rows = saved["peers"]
         st.info("Using the peer snapshot from this saved analysis. Fetch peers above to replace it with fresh data.")
-    if peer_rows:
-        st.dataframe(pd.DataFrame(peer_rows), hide_index=True, width="stretch")
+
+    if tab_peer_rows:
+        ranked_peers = rank_peers_similarity(target_profile, tab_peer_rows)
+        st.markdown("**Peer similarity ranking (Target vs Peers)**")
+        similarity_data = [
+            {
+                "Type": "Target",
+                "Ticker": c["symbol"],
+                "Sub-industry": target_profile["industry"],
+                "EBITDA margin": f"{target_profile['ebitda_margin']:.1%}",
+                "DER (Debt / Equity)": f"{target_profile['der']:.2f}x",
+                "Similarity score": "0.00 (Benchmark)"
+            }
+        ]
+        for r in ranked_peers:
+            similarity_data.append({
+                "Type": "Peer",
+                "Ticker": r["ticker"],
+                "Sub-industry": r.get("industry", "Unknown"),
+                "EBITDA margin": f"{r['ebitda_margin']:.1%}" if r.get("ebitda_margin") is not None else "—",
+                "DER (Debt / Equity)": f"{r['der']:.2f}x" if r.get("der") is not None else "—",
+                "Similarity score": f"{r.get('similarity_distance', 0):.2f}"
+            })
+        st.dataframe(pd.DataFrame(similarity_data), hide_index=True, width="stretch")
+
+        if len(tab_peer_rows) < 2:
+            st.warning(f"Valuation Policy Requirement: Minimum 2 peers required for Relative Valuation. Currently {len(tab_peer_rows)} selected.")
+        else:
+            st.success(f"Peer criteria met: {len(tab_peer_rows)} peers active.")
+
         target = dict(
             revenue=b["revenue"],
             ebit=b["revenue"] - b["cogs"] - b["opex"] - b["da"],
-            ebitda=b["revenue"] - b["cogs"] - b["opex"],
+            ebitda=target_ebitda,
             net_income=b["net_income"],
             book_equity=max(0.0, b.get("equity", 0.0) - a.other_claims),
         )
         if shares > 0:
-            relative = relative_values(peer_rows, target, b["cash"], b["short_debt"] + b["long_debt"], shares, a.other_claims, a.nonoperating_assets)
-            st.dataframe(relative, hide_index=True, width="stretch", column_config={"Peer multiple": st.column_config.NumberColumn(format="%.2fx"), "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")})
-            med = relative[relative.Case == "Median"]
+            tab_relative = relative_values(tab_peer_rows, target, b["cash"], b["short_debt"] + b["long_debt"], shares, a.other_claims, a.nonoperating_assets)
+            st.markdown("**Implied price per share from peer multiples**")
+            st.dataframe(tab_relative, hide_index=True, width="stretch", column_config={"Peer multiple": st.column_config.NumberColumn(format="%.2fx"), "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")})
+            
+            med = tab_relative[tab_relative.Case == "Median"]
             chart(go.Figure(go.Bar(x=med.Multiple, y=med["Implied price (IDR)"], marker_color="#087f69")), "IDR / share")
-            st.caption("Non-positive EV, market capitalization, or denominators are excluded per multiple. Quartiles from a small peer group are descriptive; assess growth, margin, leverage, accounting, and business mix before interpreting them.")
+            
+            tab_rel_price = composite_relative_value(tab_relative)
+            if len(tab_peer_rows) >= 2 and pd.notna(tab_rel_price):
+                c_dcf, c_rel = st.columns(2)
+                c_dcf.metric(f"DCF Fair Value ({a.dcf_weight:.0%} weight)", f"Rp {result['price']:,.0f}" if result else "—")
+                c_rel.metric(f"Composite Relative Value ({a.relative_weight:.0%} weight)", f"Rp {tab_rel_price:,.0f}")
+                tab_blended = blended_valuation(result["price"] if result else None, tab_rel_price, a.dcf_weight, a.relative_weight)
+                st.metric("Blended Fair Value / Share", f"Rp {tab_blended:,.0f}")
+                st.caption(f"Composite multiple is the unweighted average of valid peer median multiples (EV/EBITDA, P/E, P/BV).")
     else:
+        st.info("Click 'Fetch peer financials' above to load industry-matched peers and calculate relative multiples.")
         st.info("Choose comparable IDX businesses to calculate EV/Revenue, EV/EBITDA, EV/EBIT, P/E, and P/BV ranges. Peer data is fetched only when requested.")
 
 with st.sidebar:

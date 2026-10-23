@@ -24,6 +24,7 @@ BASE_FIELDS = {
 
 @dataclass
 class Assumptions:
+    # 01 Operating model: Operating & reinvestment
     growth: float = .08
     mature_growth: float = .04
     ebit_margin: float = .18
@@ -31,30 +32,46 @@ class Assumptions:
     gross_margin: float = .40
     capex_pct: float = .06
     depreciation_rate: float = .12
-    ar_days: float = 45
-    inventory_days: float = 60
-    ap_days: float = 50
+    nwc_pct: float | None = None          # Damodaran Non-Cash Working Capital as % of revenue (defaults to baseline ratio)
+    tax_rate: float = .22
+    minimum_cash_pct: float = .02
+    dividend_payout: float = .30
+    annual_repayment: float = 0.0
+
+    # Backward compatibility fields for turnover days
+    ar_days: float = 45.0
+    inventory_days: float = 60.0
+    ap_days: float = 50.0
     other_ca_pct: float = .02
     other_cl_pct: float = .04
-    tax_rate: float = .22
-    debt_rate: float = .08
-    annual_repayment: float = 0
-    dividend_payout: float = .30
-    minimum_cash_pct: float = .02
-    risk_free: float = .065
+
+    # 02 Macro & WACC: Capital market assumptions
+    risk_free: float = .0664             # Dec 31, 2025 benchmark: Indonesian 10Y Government Bond (FR series)
+    mature_equity_premium: float = .0460 # Damodaran published NYU Stern mature market ERP
+    country_risk_premium: float = .0218  # Damodaran published Indonesia CRP (Baa2 / BBB spread * equity volatility)
     beta: float = 1.0
-    equity_premium: float = .06
+    debt_rate: float = .08
     debt_weight: float = .20
     wacc_override: float | None = None
+    equity_premium: float = .0460        # Backward-compatible alias
+
+    # 03 Valuation policy: Methods & scenarios
     terminal_growth: float = .035
     terminal_roic: float = .15
-    other_claims: float = 0
-    nonoperating_assets: float = 0
-    country_risk_premium: float = 0.0
+    other_claims: float = 0.0
+    nonoperating_assets: float = 0.0
+    dcf_weight: float = 0.75
+    relative_weight: float = 0.25
+    scenario_shift: float = 0.02
+
+    @property
+    def total_equity_premium(self):
+        return self.mature_equity_premium + self.country_risk_premium
 
     @property
     def cost_of_equity(self):
-        return self.risk_free + self.beta * self.equity_premium + self.country_risk_premium
+        # Damodaran standard: Beta scales Total ERP (Mature ERP + CRP)
+        return self.risk_free + self.beta * self.total_equity_premium
 
     @property
     def wacc(self):
@@ -89,7 +106,11 @@ def infer_assumptions(historical, b, company=None):
         a.mature_margin = a.ebit_margin
         a.gross_margin = max(0.05, min(0.95, 1.0 - (b.get("cogs", 0) / r)))
 
-        # Working capital days
+        # Damodaran Non-Cash Working Capital as % of revenue (replaces granular turnover days)
+        base_nwc = (b.get("ar", 0) + b.get("inventory", 0) + b.get("other_ca", 0) - b.get("ap", 0) - b.get("other_cl", 0))
+        a.nwc_pct = max(-0.20, min(0.60, base_nwc / r))
+
+        # Working capital days (retained for backward compatibility)
         a.ar_days = max(0.0, min(365.0, (b.get("ar", 0) / r) * 365.0))
         cogs = b.get("cogs", 0.0)
         a.inventory_days = max(0.0, min(365.0, (b.get("inventory", 0) / cogs) * 365.0)) if cogs > 0 else 0.0
@@ -174,6 +195,8 @@ def forecast(b, a, first_year, drivers=None):
     p = dict(b)
     p["nwc"] = b["ar"] + b["inventory"] + b["other_ca"] - b["ap"] - b["other_cl"]
     p["invested_capital"] = b["ppe"] + p["nwc"] + b["other_assets"]
+    base_nwc_ratio = p["nwc"] / b["revenue"] if b["revenue"] > 0 else 0.10
+    nwc_ratio = a.nwc_pct if a.nwc_pct is not None else base_nwc_ratio
     nol = 0.0
 
     result = []
@@ -211,12 +234,25 @@ def forecast(b, a, first_year, drivers=None):
         tax = max(0.0, ebit - interest) * a.tax_rate
         net_income = ebit - interest - tax
 
-        ar = revenue * a.ar_days / 365
-        inventory = cogs * a.inventory_days / 365
-        ap = cogs * a.ap_days / 365
-        other_ca, other_cl = revenue * a.other_ca_pct, revenue * a.other_cl_pct
-        nwc = ar + inventory + other_ca - ap - other_cl
+        # Damodaran Non-Cash Working Capital as % of revenue (replaces granular turnover days)
+        nwc = revenue * nwc_ratio
         delta_nwc = nwc - p["nwc"]
+
+        scale = revenue / b["revenue"] if b["revenue"] > 0 else 1.0
+        gross_ca = b["ar"] + b["inventory"] + b["other_ca"]
+        gross_cl = b["ap"] + b["other_cl"]
+        ar = b["ar"] * scale
+        inventory = b["inventory"] * scale
+        other_ca = b["other_ca"] * scale
+        ap = b["ap"] * scale
+        other_cl = b["other_cl"] * scale
+        expected_nwc = gross_ca * scale - gross_cl * scale
+        nwc_diff = nwc - expected_nwc
+        if abs(nwc_diff) > 1e-9:
+            tot_gross = gross_ca + gross_cl
+            ca_weight = (gross_ca / tot_gross) if tot_gross > 0 else 0.5
+            ar += nwc_diff * ca_weight
+            ap -= nwc_diff * (1.0 - ca_weight)
 
         cfo = net_income + da - delta_nwc
         dividends = max(0, net_income) * a.dividend_payout
@@ -337,3 +373,37 @@ def relative_values(peers, target, cash, debt, shares, other_claims=0, nonoperat
             equity = value + cash + nonoperating_assets - debt - other_claims if numerator == "ev" else value
             rows.append({"Multiple": label, "Case": name, "Peers used": len(multiples), "Peer multiple": mult, "Implied price (IDR)": equity / shares})
     return pd.DataFrame(rows)
+
+
+def composite_relative_value(relative_df, metrics=("EV / EBITDA", "P / E", "P / BV")):
+    """Calculates the composite average implied price from median peer multiples.
+    Requires at least one valid multiple from the specified metrics.
+    """
+    if relative_df is None or relative_df.empty:
+        return float("nan")
+    median_rows = relative_df[relative_df["Case"] == "Median"]
+    valid_prices = []
+    for m in metrics:
+        subset = median_rows[median_rows["Multiple"] == m]
+        if not subset.empty:
+            price = subset.iloc[0]["Implied price (IDR)"]
+            if pd.notna(price) and math.isfinite(price) and price > 0:
+                valid_prices.append(price)
+    return float(np.mean(valid_prices)) if valid_prices else float("nan")
+
+
+def blended_valuation(dcf_price, rel_price, dcf_weight=0.75, rel_weight=0.25):
+    """Blends DCF and Relative Valuation prices according to Valuation Policy weights."""
+    has_dcf = pd.notna(dcf_price) and math.isfinite(dcf_price) and dcf_price > 0
+    has_rel = pd.notna(rel_price) and math.isfinite(rel_price) and rel_price > 0
+
+    if has_dcf and has_rel:
+        total_w = dcf_weight + rel_weight
+        if total_w <= 0:
+            return float(dcf_price)
+        return float((dcf_price * dcf_weight + rel_price * rel_weight) / total_w)
+    elif has_dcf:
+        return float(dcf_price)
+    elif has_rel:
+        return float(rel_price)
+    return float("nan")

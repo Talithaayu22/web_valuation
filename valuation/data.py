@@ -244,6 +244,44 @@ def demo_company():
     )
 
 
+IDX_INDUSTRY_PEERS = {
+    # Thermal Coal / Mining
+    "Thermal Coal": ["ADRO", "PTBA", "ITMG", "BUMI", "INDY", "HRUM"],
+    # Oil & Gas
+    "Oil & Gas Refining & Marketing": ["AKRA", "PGAS", "MEDC"],
+    "Oil & Gas E&P": ["MEDC", "PGAS", "ENRG"],
+    # Consumer Staples / Food & Beverage
+    "Packaged Foods": ["ICBP", "INDF", "MYOR", "UNVR", "ROTI", "ULTJ"],
+    "Household & Personal Products": ["UNVR", "KINO", "TCID"],
+    "Drug Manufacturers - General": ["KLBF", "SIDO", "TSPC", "KAEF"],
+    # Cement & Building
+    "Building Materials": ["SMGR", "INTP", "SMBR"],
+    # Industrial Conglomerates / Heavy Equipment
+    "Industrial Conglomerates": ["ASII", "UNTR"],
+    # Telecom
+    "Telecom Services": ["TLKM", "ISAT", "EXCL"],
+}
+
+
+def get_default_peers_for_ticker(symbol, industry=None):
+    """Returns candidate peer tickers for a given symbol based on industry mapping."""
+    clean = symbol.replace(".JK", "").upper()
+    candidates = []
+    # Check by industry if provided
+    if industry and industry in IDX_INDUSTRY_PEERS:
+        candidates = [t for t in IDX_INDUSTRY_PEERS[industry] if t != clean]
+    # Check by ticker in predefined clusters
+    if not candidates:
+        for group in IDX_INDUSTRY_PEERS.values():
+            if clean in group:
+                candidates = [t for t in group if t != clean]
+                break
+    # Default fallbacks within energy / general if none matched
+    if not candidates:
+        candidates = [t for t in ["ADRO", "PTBA", "ITMG", "AKRA", "PGAS"] if t != clean]
+    return candidates
+
+
 def peer_record(company, period, fx, claims=None):
     h = company["historical"]
     if period not in h.columns:
@@ -265,16 +303,60 @@ def peer_record(company, period, fx, claims=None):
     else:
         net_claim = claims
 
+    tot_debt = (float(p.short_debt + p.long_debt) * fx)
     book_eq = (float(p["common_equity"]) * fx) if "common_equity" in p and pd.notna(p["common_equity"]) else (float(p.equity) * fx)
     inv_cap = (float(p.short_debt + p.long_debt + p.equity - p.cash) * fx)
+
+    rev_val = float(p.revenue) * fx if pd.notna(p.get("revenue")) else None
+    ebitda_val = float(p.ebitda) * fx if pd.notna(p.get("ebitda")) else None
+    margin = (ebitda_val / rev_val) if rev_val and ebitda_val and rev_val > 0 else None
+    der = (tot_debt / book_eq) if book_eq and book_eq > 0 else None
 
     return dict(
         ticker=company["symbol"],
         name=company["name"],
         period=period,
+        industry=company.get("industry", "Unknown"),
+        sector=company.get("sector", "Unknown"),
         market_cap=market_cap,
+        total_debt=tot_debt,
         ev=market_cap + (p.short_debt + p.long_debt - p.cash) * fx + net_claim,
         book_equity=book_eq,
         invested_capital=inv_cap,
+        ebitda_margin=margin,
+        der=der,
         **{k: None if pd.isna(p.get(k)) else float(p[k]) * fx for k in ("revenue", "ebitda", "ebit", "net_income")}
     )
+
+
+def rank_peers_similarity(target_profile, candidate_records):
+    """Ranks candidate peer records based on similarity to target:
+    1. Same sub-industry match prioritised.
+    2. Financial similarity: Euclidean distance on normalized EBITDA Margin and DER (Debt-to-Equity).
+    Returns candidates sorted by ascending similarity distance.
+    """
+    target_margin = target_profile.get("ebitda_margin")
+    target_der = target_profile.get("der")
+    target_ind = (target_profile.get("industry") or "").strip().lower()
+
+    ranked = []
+    for rec in candidate_records:
+        rec_margin = rec.get("ebitda_margin")
+        rec_der = rec.get("der")
+        rec_ind = (rec.get("industry") or "").strip().lower()
+
+        # Distance components with typical standard deviations as normalizers (margin ~10%, DER ~50%)
+        m_diff = abs((rec_margin - target_margin) / 0.10) if (rec_margin is not None and target_margin is not None) else 2.0
+        d_diff = abs((rec_der - target_der) / 0.50) if (rec_der is not None and target_der is not None) else 2.0
+        dist = m_diff + d_diff
+
+        # Penalty if different industry
+        if target_ind and rec_ind and target_ind != rec_ind:
+            dist += 5.0
+
+        r = dict(rec)
+        r["similarity_distance"] = round(dist, 4)
+        ranked.append(r)
+
+    ranked.sort(key=lambda x: x["similarity_distance"])
+    return ranked

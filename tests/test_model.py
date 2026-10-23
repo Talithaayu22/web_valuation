@@ -4,7 +4,8 @@ import pandas as pd
 import pytest
 from openpyxl import load_workbook
 from valuation.data import demo_company, normalize, ticker_symbol, peer_record
-from valuation.model import Assumptions, BASE_FIELDS, base_check, forecast, dcf, sensitivity, default_drivers, relative_values, infer_assumptions
+from valuation.model import Assumptions, BASE_FIELDS, base_check, forecast, dcf, sensitivity, default_drivers, relative_values, infer_assumptions, composite_relative_value, blended_valuation
+from valuation.data import rank_peers_similarity
 from valuation.export import workbook
 
 
@@ -169,3 +170,41 @@ def test_relative_values_with_pbv():
     assert "P / BV" in r.index
     assert r.loc["P / BV", "Peer multiple"] == pytest.approx(2.0)
     assert r.loc["P / BV", "Implied price (IDR)"] == pytest.approx(10.0)
+
+
+def test_damodaran_crp_mature_erp_and_cost_of_equity():
+    a = Assumptions(beta=1.2)
+    assert a.mature_equity_premium == pytest.approx(0.0460)
+    assert a.country_risk_premium == pytest.approx(0.0218)
+    assert a.total_equity_premium == pytest.approx(0.0678)
+    assert a.risk_free == pytest.approx(0.0664)
+    assert a.cost_of_equity == pytest.approx(0.0664 + 1.2 * 0.0678)
+
+
+def test_composite_relative_valuation_and_blended_weighting():
+    import math
+    peers = [
+        dict(ev=100, market_cap=80, revenue=50, ebitda=10, ebit=8, net_income=5, book_equity=40),
+        dict(ev=200, market_cap=160, revenue=100, ebitda=20, ebit=16, net_income=10, book_equity=80)
+    ]
+    target = dict(revenue=100, ebitda=20, ebit=16, net_income=10, book_equity=50)
+    rel_df = relative_values(peers, target, cash=10, debt=30, shares=10)
+    comp_price = composite_relative_value(rel_df)
+    assert math.isfinite(comp_price)
+    assert comp_price > 0
+    blended = blended_valuation(1000.0, 800.0, dcf_weight=0.75, rel_weight=0.25)
+    assert blended == pytest.approx(950.0)
+    assert blended_valuation(1000.0, float('nan'), 0.75, 0.25) == 1000.0
+
+
+def test_peer_similarity_ranking_by_ebitda_margin_and_der():
+    target = dict(ebitda_margin=0.20, der=0.50, industry='Thermal Coal')
+    candidates = [
+        dict(ticker='FAR', industry='Telecom', ebitda_margin=0.40, der=1.20),
+        dict(ticker='CLOSE', industry='Thermal Coal', ebitda_margin=0.22, der=0.48),
+        dict(ticker='MEDIUM', industry='Thermal Coal', ebitda_margin=0.15, der=0.80),
+    ]
+    ranked = rank_peers_similarity(target, candidates)
+    assert ranked[0]['ticker'] == 'CLOSE'
+    assert ranked[1]['ticker'] == 'MEDIUM'
+    assert ranked[2]['ticker'] == 'FAR'
