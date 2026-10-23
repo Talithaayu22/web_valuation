@@ -296,12 +296,12 @@ def test_investment_recommendation_hurdles():
     assert sell['rating'] == 'SELL / UNDERWEIGHT'
     assert sell['upside'] == pytest.approx(-0.20)
 
-    # Distressed / Negative Equity: e.g. DEWA or SMGR where debt exceeds EV
-    distressed = investment_recommendation(reference_price=268.0, blended_price=0.0)
-    assert distressed['rating'] == 'SELL / UNDERWEIGHT'
-    assert distressed['upside'] == -1.0
-    assert distressed['margin_of_safety'] == -1.0
-    assert 'Distressed Balance Sheet' in distressed['summary']
+    # Ineligible / Distressed / Negative Equity: e.g. DEWA or SMGR where debt exceeds EV
+    ineligible = investment_recommendation(reference_price=268.0, blended_price=0.0)
+    assert ineligible['rating'] == 'NOT ELIGIBLE'
+    assert ineligible['upside'] == 0.0
+    assert ineligible['margin_of_safety'] == 0.0
+    assert 'Ineligible' in ineligible['summary']
 
     # Pending: Missing price or NaN
     pending = investment_recommendation(reference_price=0.0, blended_price=100.0)

@@ -372,12 +372,17 @@ rec = investment_recommendation(price, effective_price)
 
 with overview:
     # 1. Institutional Recommendation Banner
+    upside_str = (
+        f"""<span style="font-size: 14px; color: #5c7080;">Capital Structure: <b>Negative Intrinsic Equity (Insolvent / Restructuring Risk)</b></span>"""
+        if rec['rating'] == 'NOT ELIGIBLE' else
+        f"""<span style="font-size: 15px; color: #2e3e3b;">Implied Upside: <b>{rec['upside']:+.1%}</b> &nbsp;|&nbsp; Margin of Safety: <b>{rec['margin_of_safety']:.1%}</b></span>"""
+    )
     st.markdown(
         f"""<div style="background-color: {rec['color']}15; border-left: 5px solid {rec['color']}; padding: 14px 18px; border-radius: 8px; margin: 10px 0 18px;">
         <span style="font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: {rec['color']}; text-transform: uppercase;">INVESTMENT RECOMMENDATION · MID-TERM DECISION CRITERIA</span>
         <div style="display: flex; align-items: baseline; gap: 16px; margin: 6px 0 4px;">
             <span style="font-size: 24px; font-weight: 800; color: {rec['color']};">{rec['rating']}</span>
-            <span style="font-size: 15px; color: #2e3e3b;">Implied Upside: <b>{rec['upside']:+.1%}</b> &nbsp;|&nbsp; Margin of Safety: <b>{rec['margin_of_safety']:.1%}</b></span>
+            {upside_str}
         </div>
         <div style="font-size: 13px; color: #435451;">{rec['summary']}</div>
         </div>""",
@@ -387,10 +392,10 @@ with overview:
     # 2. Metric Columns
     cols = st.columns(5)
     cols[0].metric("Reference price", f"Rp {price:,.0f}" if price else "Not available")
-    cols[1].metric("Blended fair value", f"Rp {effective_price:,.0f}" if effective_price else "Check inputs")
-    cols[2].metric("DCF value / share", f"Rp {result['price']:,.0f}" if result else "Check assumptions")
-    cols[3].metric("Relative value / share", f"Rp {rel_price:,.0f}" if pd.notna(rel_price) else "Needs >= 2 peers")
-    upside = (effective_price / price - 1) if effective_price and price else None
+    cols[1].metric("Blended fair value", f"Rp {effective_price:,.0f}" if effective_price and effective_price > 0 else ("Not eligible" if effective_price is not None and effective_price <= 0 else "Check inputs"))
+    cols[2].metric("DCF value / share", f"Rp {result['price']:,.0f}" if result and result['price'] > 0 else ("Not eligible" if result and result['price'] <= 0 else "Check assumptions"))
+    cols[3].metric("Relative value / share", f"Rp {rel_price:,.0f}" if pd.notna(rel_price) and rel_price > 0 else "Needs >= 2 peers")
+    upside = (effective_price / price - 1) if effective_price and price and effective_price > 0 else None
     cols[4].metric("Implied upside / downside", f"{upside:+.1%}" if upside is not None else "—")
 
     # 3. Valuation Approach Selection & Justification Card (Rule 1 & Rule 2)

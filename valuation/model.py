@@ -498,14 +498,14 @@ def investment_recommendation(reference_price, blended_price, hurdle_rate=0.15):
 
     if blended_price <= 0:
         return dict(
-            rating="SELL / UNDERWEIGHT",
-            upside=-1.0,
-            margin_of_safety=-1.0,
-            color="#c23b22",
+            rating="NOT ELIGIBLE",
+            upside=0.0,
+            margin_of_safety=0.0,
+            color="#6c757d",
             summary=(
-                f"Distressed Balance Sheet: Fundamental equity value is underwater (Rp {blended_price:,.2f}), "
-                f"as net debt exceeds operating enterprise value. Intrinsic cash flow provides zero fundamental "
-                f"support for the market price (Rp {reference_price:,.0f})."
+                f"Ineligible for Valuation Model: Operating enterprise value is insufficient to cover net debt "
+                f"(fundamental equity value is underwater at Rp {blended_price:,.2f}). "
+                f"Standard going-concern non-financial DCF is not applicable to financially distressed capital structures."
             )
         )
 
