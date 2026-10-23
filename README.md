@@ -1,6 +1,31 @@
 # Nusa — IDX Valuation Lab
 
-A local Python/Streamlit research app for Indonesian listed operating companies.
+A local Python/Streamlit equity research and 3-statement valuation workspace for Indonesian Stock Exchange (IDX) listed operating companies.
+
+![Nusa — IDX Valuation Lab Preview](app-preview.png)
+
+## Project Structure
+
+```text
+├── app.py                  # Main Streamlit web application & UI tabs
+├── valuation/
+│   ├── data.py             # Financial statement ingestion & normalization
+│   ├── model.py            # 10-year 3-statement forecast, DCF, sensitivity & peer multiples
+│   ├── export.py           # 10-sheet formatted Excel (.xlsx) snapshot generator
+│   └── storage.py          # Local SQLite persistence for saved analyses
+├── tests/
+│   ├── test_app.py         # End-to-end Streamlit UI & persistence tests
+│   └── test_model.py       # Accounting linkage, DCF math & validation unit tests
+├── .streamlit/config.toml  # Theme and loopback server configuration
+├── requirements.txt        # Python package dependencies
+├── start.cmd / start.ps1   # One-click Windows launchers
+└── app-preview.png         # Application preview screenshot
+```
+
+## Repository Branches
+
+- **`checkpoint` / `checkpoint-baseline`**: Stable baseline release using `yfinance` statements and strict opening balance verification.
+- **`master`**: Experimental integration branch incorporating direct IDX XBRL/Excel scraper capabilities (`valuation/idx_scraper`).
 
 ## Run
 
