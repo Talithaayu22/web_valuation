@@ -26,7 +26,7 @@ BASE_FIELDS = {
 class Assumptions:
     # 01 Operating model: Operating & reinvestment
     growth: float = .08
-    mature_growth: float = .04
+    mature_growth: float = .025
     ebit_margin: float = .18
     mature_margin: float = .18
     gross_margin: float = .40
@@ -56,7 +56,7 @@ class Assumptions:
     equity_premium: float = .0460        # Backward-compatible alias
 
     # 03 Valuation policy: Methods & scenarios
-    terminal_growth: float = .035
+    terminal_growth: float = .025
     terminal_roic: float = .15
     other_claims: float = 0.0
     nonoperating_assets: float = 0.0
@@ -414,16 +414,18 @@ def composite_relative_value(relative_df, metrics=("EV / EBITDA", "P / E", "P / 
 
 def blended_valuation(dcf_price, rel_price, dcf_weight=0.75, rel_weight=0.25):
     """Blends DCF and Relative Valuation prices according to Valuation Policy weights."""
-    has_dcf = pd.notna(dcf_price) and math.isfinite(dcf_price) and dcf_price > 0
+    valid_dcf = pd.notna(dcf_price) and math.isfinite(dcf_price)
     has_rel = pd.notna(rel_price) and math.isfinite(rel_price) and rel_price > 0
 
-    if has_dcf and has_rel:
-        total_w = dcf_weight + rel_weight
-        if total_w <= 0:
-            return float(dcf_price)
-        return float((dcf_price * dcf_weight + rel_price * rel_weight) / total_w)
-    elif has_dcf:
-        return float(dcf_price)
+    if valid_dcf:
+        # Equity limited liability: intrinsic equity per share cannot fall below 0 in public equity markets
+        eff_dcf = max(0.0, float(dcf_price))
+        if has_rel:
+            total_w = dcf_weight + rel_weight
+            if total_w <= 0:
+                return eff_dcf
+            return float((eff_dcf * dcf_weight + rel_price * rel_weight) / total_w)
+        return eff_dcf
     elif has_rel:
         return float(rel_price)
     return float("nan")
@@ -474,14 +476,37 @@ def investment_recommendation(reference_price, blended_price, hurdle_rate=0.15):
     - BUY / OVERWEIGHT: Implied upside > +15%
     - HOLD / NEUTRAL: Implied upside between -15% and +15%
     - SELL / UNDERWEIGHT: Implied upside < -15%
+    - Distressed Balance Sheet: blended_price <= 0 due to debt exceeding enterprise value
     """
-    if not reference_price or not blended_price or not (reference_price > 0 and blended_price > 0):
+    if not reference_price or not (reference_price > 0):
         return dict(
             rating="DATA PENDING",
             upside=0.0,
             margin_of_safety=0.0,
             color="#8c9e99",
-            summary="Reference price or fair value calculation pending review of inputs."
+            summary="Reference market price pending review of inputs."
+        )
+
+    if blended_price is None or not math.isfinite(blended_price):
+        return dict(
+            rating="DATA PENDING",
+            upside=0.0,
+            margin_of_safety=0.0,
+            color="#8c9e99",
+            summary="Fair value calculation pending review of inputs."
+        )
+
+    if blended_price <= 0:
+        return dict(
+            rating="SELL / UNDERWEIGHT",
+            upside=-1.0,
+            margin_of_safety=-1.0,
+            color="#c23b22",
+            summary=(
+                f"Distressed Balance Sheet: Fundamental equity value is underwater (Rp {blended_price:,.2f}), "
+                f"as net debt exceeds operating enterprise value. Intrinsic cash flow provides zero fundamental "
+                f"support for the market price (Rp {reference_price:,.0f})."
+            )
         )
 
     upside = (blended_price / reference_price) - 1.0

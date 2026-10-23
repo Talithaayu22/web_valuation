@@ -13,11 +13,10 @@ BILLION = 1e9
 CATALOG = {
     "TLKM": "Telkom Indonesia", "ASII": "Astra International", "ICBP": "Indofood CBP",
     "INDF": "Indofood Sukses Makmur", "UNVR": "Unilever Indonesia", "KLBF": "Kalbe Farma",
-    "MYOR": "Mayora Indah", "SIDO": "Industri Jamu Sido Muncul", "SMGR": "Semen Indonesia",
+    "MYOR": "Mayora Indah", "SIDO": "Industri Jamu Sido Muncul",
     "INTP": "Indocement", "UNTR": "United Tractors", "ADRO": "Alamtri Resources Indonesia",
     "PTBA": "Bukit Asam", "ITMG": "Indo Tambangraya Megah", "ANTM": "Aneka Tambang",
     "AKRA": "AKR Corporindo", "PGAS": "Perusahaan Gas Negara", "MEDC": "Medco Energi Internasional",
-    "BBCA": "Bank Central Asia", "BBRI": "Bank Rakyat Indonesia", "BMRI": "Bank Mandiri",
 }
 
 
@@ -285,6 +284,9 @@ IDX_INDUSTRY_PEERS = {
     "Building Materials": ["SMGR", "INTP", "SMBR"],
     # Industrial Conglomerates / Heavy Equipment
     "Industrial Conglomerates": ["ASII", "UNTR"],
+    # Agriculture / Plantation
+    "Farm Products": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP"],
+    "Agricultural Inputs": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP"],
     # Telecom
     "Telecom Services": ["TLKM", "ISAT", "EXCL"],
 }

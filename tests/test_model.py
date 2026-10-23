@@ -296,6 +296,35 @@ def test_investment_recommendation_hurdles():
     assert sell['rating'] == 'SELL / UNDERWEIGHT'
     assert sell['upside'] == pytest.approx(-0.20)
 
+    # Distressed / Negative Equity: e.g. DEWA or SMGR where debt exceeds EV
+    distressed = investment_recommendation(reference_price=268.0, blended_price=0.0)
+    assert distressed['rating'] == 'SELL / UNDERWEIGHT'
+    assert distressed['upside'] == -1.0
+    assert distressed['margin_of_safety'] == -1.0
+    assert 'Distressed Balance Sheet' in distressed['summary']
+
+    # Pending: Missing price or NaN
+    pending = investment_recommendation(reference_price=0.0, blended_price=100.0)
+    assert pending['rating'] == 'DATA PENDING'
+    pending_nan = investment_recommendation(reference_price=100.0, blended_price=float('nan'))
+    assert pending_nan['rating'] == 'DATA PENDING'
+
+
+def test_blended_valuation_floors_negative_dcf_equity():
+    # When DCF equity is negative (e.g. -43.53), floor at 0 under equity limited liability
+    blend_solo = blended_valuation(dcf_price=-43.53, rel_price=float('nan'), dcf_weight=0.75, rel_weight=0.25)
+    assert blend_solo == 0.0
+
+    # When Relative Valuation has positive value, blend 0.0 and positive relative price
+    blend_with_rel = blended_valuation(dcf_price=-43.53, rel_price=100.0, dcf_weight=0.75, rel_weight=0.25)
+    assert blend_with_rel == pytest.approx(25.0)
+
+
+def test_default_terminal_growth_aligns_with_bi_target():
+    asm = Assumptions()
+    assert asm.terminal_growth == pytest.approx(0.025)
+    assert asm.mature_growth == pytest.approx(0.025)
+
 
 def test_sustainable_growth_and_capex_normalization(case):
     _, b, _ = case

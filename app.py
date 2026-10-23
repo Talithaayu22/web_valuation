@@ -255,6 +255,7 @@ with assumptions_tab:
             st.markdown("#### 03 · Valuation policy")
             st.caption("Multi-approach weighting, terminal parameters, and balance sheet claims bridge.")
             pct("Terminal growth (%)", "terminal_growth", 0, 15)
+            st.caption("Damodaran standard: default 2.50% aligns with Bank Indonesia long-term central inflation target.")
             pct("Terminal return on invested capital (%)", "terminal_roic", .1, 100)
             pct("Valuation weight · DCF (%)", "dcf_weight", 0, 100)
             pct("Valuation weight · Relative (%)", "relative_weight", 0, 100)
