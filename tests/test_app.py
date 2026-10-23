@@ -31,3 +31,16 @@ def test_save_and_reopen_restores_assumptions(tmp_path,monkeypatch):
     assert not app.exception
     assert next(n.value for n in app.number_input if n.label == "Growth · years 1–5 (%)") == 11.
     assert next(m.value for m in app.metric if m.label == "DCF value / share") == saved_price
+
+
+def test_valuation_assumptions_tab_renders_three_pillars():
+    app = AppTest.from_file(Path(__file__).resolve().parents[1]/"app.py", default_timeout=30).run()
+    assert not app.exception
+    tab_labels = [t.label for t in app.tabs]
+    assert "Valuation assumptions" in tab_labels
+    markdown_texts = " ".join(x.value for x in app.markdown)
+    assert "01 · Operating model" in markdown_texts
+    assert "02 · Macro & WACC" in markdown_texts
+    assert "03 · Valuation policy" in markdown_texts
+    assert any(m.label == "Calculated WACC" for m in app.metric)
+    assert any(m.label == "Cost of Equity" for m in app.metric)

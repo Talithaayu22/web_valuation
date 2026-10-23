@@ -126,7 +126,9 @@ else:
         st.warning("This version models non-financial operating companies. Banks, insurers, and REITs need a dedicated valuation model. Choose another company.")
         st.stop()
 
-overview, statements, dcf_tab, peers_tab, data_tab = st.tabs(["Overview", "10-year model", "DCF & sensitivity", "Relative valuation", "Data review"])
+overview, assumptions_tab, statements, dcf_tab, peers_tab, data_tab = st.tabs([
+    "Overview", "Valuation assumptions", "10-year model", "DCF & sensitivity", "Relative valuation", "Data review"
+])
 
 with data_tab:
     st.subheader("Start with trustworthy inputs")
@@ -186,17 +188,31 @@ def inferred_assumptions():
 
 
 initial = Assumptions(**saved["assumptions"]) if saved.get("assumptions") else inferred_assumptions()
-with st.sidebar:
+with assumptions_tab:
+    st.subheader("Valuation assumptions & methodology lab")
+    st.caption("Review, customize, and stress-test the three fundamental pillars of the valuation model. Changes update all connected statements, DCF cash flows, and relative valuation bridges.")
+
+    # Live Metric Summary Header
+    m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
+    m_col1.metric("Calculated WACC", f"{initial.wacc:.2%}")
+    m_col2.metric("Cost of Equity", f"{initial.cost_of_equity:.2%}")
+    m_col3.metric("Borrowing Cost (Kd)", f"{initial.debt_rate:.2%}")
+    m_col4.metric("Debt Weight", f"{initial.debt_weight:.0%}")
+    m_col5.metric("Initial Growth (Y1–5)", f"{initial.growth:.1%}")
+    m_col6.metric("EBIT Margin (Y1–5)", f"{initial.ebit_margin:.1%}")
     st.divider()
-    st.markdown("### Model assumptions")
-    st.caption("Operating ratios start from the latest annual data where available. Growth, discount-rate, and terminal assumptions are editable examples. Click Apply to update.")
+
     with st.form(key("assumptions")):
         fields = {}
 
         def pct(label, field, lo=0., hi=100.):
             fields[field] = st.number_input(label, min_value=float(lo), max_value=float(hi), value=float(getattr(initial, field) * 100), step=.5, key=key(field)) / 100
 
-        with st.expander("01 · Operating model (Operating & reinvestment)", expanded=True):
+        col_op, col_macro, col_policy = st.columns(3)
+
+        with col_op:
+            st.markdown("#### 01 · Operating model")
+            st.caption("Revenue growth, operating margins, reinvestment, and capital intensity.")
             pct("Growth · years 1–5 (%)", "growth", -50, 100)
             pct("Growth · year 10 (%)", "mature_growth", -50, 50)
             pct("EBIT margin · years 1–5 (%)", "ebit_margin", -50, 80)
@@ -218,34 +234,44 @@ with st.sidebar:
             fields["dividend_payout"] = float(initial.dividend_payout)
             fields["annual_repayment"] = float(initial.annual_repayment)
 
-        with st.expander("02 · Macro & WACC (Capital market assumptions)", expanded=True):
+        with col_macro:
+            st.markdown("#### 02 · Macro & WACC")
+            st.caption("Damodaran ERP, Indonesia CRP, JKSE regression beta, and capital structure.")
             pct("Risk-free rate (IndoGov 10Y FR @ Dec 31, 2025) (%)", "risk_free", 0, 30)
             pct("Mature market ERP (Damodaran NYU Stern) (%)", "mature_equity_premium", 0, 20)
             pct("Indonesia country risk premium (CRP) (%)", "country_risk_premium", 0, 20)
             m_erp = fields.get("mature_equity_premium", initial.mature_equity_premium)
             c_crp = fields.get("country_risk_premium", initial.country_risk_premium)
-            st.caption(f"Total Indonesia ERP: {((m_erp + c_crp) * 100):.2f}% (Mature Base {m_erp*100:.2f}% + CRP {c_crp*100:.2f}%)")
+            st.caption(f"**Total Indonesia ERP**: {((m_erp + c_crp) * 100):.2f}% (Mature Base {m_erp*100:.2f}% + CRP {c_crp*100:.2f}%)")
             fields["equity_premium"] = fields["mature_equity_premium"]
-            fields["beta"] = st.number_input("Levered beta", min_value=-2.0, max_value=4., value=float(initial.beta), step=.05, key=key("beta"))
+            fields["beta"] = st.number_input("Levered beta", min_value=-2.0, max_value=4., value=float(initial.beta), step=.05, key=key("beta"), help="Derived from 5Y monthly regression vs ^JKSE with Blume mean-reversion adjustment.")
             pct("Pre-tax borrowing cost (%)", "debt_rate", 0, 50)
             pct("Target debt / capital (%)", "debt_weight", 0, 95)
             override = st.checkbox("Override calculated WACC", value=initial.wacc_override is not None, key=key("override"))
             custom_wacc = st.number_input("WACC override (%)", min_value=.1, max_value=60., value=float((initial.wacc_override or initial.wacc) * 100), step=.25, key=key("custom_wacc"))
             fields["wacc_override"] = custom_wacc / 100 if override else None
 
-        with st.expander("03 · Valuation policy (Methods & scenarios)", expanded=True):
+        with col_policy:
+            st.markdown("#### 03 · Valuation policy")
+            st.caption("Multi-approach weighting, terminal parameters, and balance sheet claims bridge.")
             pct("Terminal growth (%)", "terminal_growth", 0, 15)
             pct("Terminal return on invested capital (%)", "terminal_roic", .1, 100)
             pct("Valuation weight · DCF (%)", "dcf_weight", 0, 100)
             pct("Valuation weight · Relative (%)", "relative_weight", 0, 100)
             pct("Scenario shift · Bull/Bear (+/- %)", "scenario_shift", 0, 20)
-            fields["other_claims"] = st.number_input("Minorities / other equity claims (IDR bn)", min_value=0., value=float(initial.other_claims), key=key("claims"))
-            st.caption("Deducts reported minority interests (NCI) from EV to bridge to Equity Value.")
-            fields["nonoperating_assets"] = st.number_input("Additional non-operating assets (IDR bn)", min_value=0., value=float(initial.nonoperating_assets), key=key("nonop"))
-        st.form_submit_button("Apply assumptions", type="primary", width="stretch")
+            fields["other_claims"] = st.number_input("Minorities / other equity claims (IDR bn)", min_value=0., value=float(initial.other_claims), key=key("claims"), help="Deducts reported minority interests (NCI) from EV to bridge to Equity Value.")
+            fields["nonoperating_assets"] = st.number_input("Additional non-operating assets (IDR bn)", min_value=0., value=float(initial.nonoperating_assets), key=key("nonop"), help="Adds non-operating investments / associates to EV.")
+
+        st.divider()
+        st.form_submit_button("Apply assumptions", type="primary", use_container_width=True)
     a = Assumptions(**fields)
+
+with st.sidebar:
+    st.divider()
+    st.markdown("### Model assumptions")
     st.metric("Calculated WACC", f"{a.wacc:.2%}")
     st.caption(f"Cost of equity {a.cost_of_equity:.2%} · Target debt weight {a.debt_weight:.0%}")
+    st.info("💡 Edit operating, macro WACC, and valuation policy assumptions in the **Valuation assumptions** tab.")
 
 with statements:
     st.subheader("Ten years, three connected statements")
