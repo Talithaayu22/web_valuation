@@ -179,21 +179,25 @@ def fetch_company(symbol):
     if historical.empty:
         raise ValueError("No common annual fiscal dates across all three statements.")
 
-    # Scrape Beta directly from yfinance
-    beta = number(info.get("beta"))
-    if beta is None:
-        # Fallback: compute 5Y monthly regression slope vs ^JKSE using yfinance historical close prices
-        try:
-            p_hist = t.history(period="5y", interval="1mo")["Close"].pct_change().dropna()
-            idx_hist = yf.Ticker("^JKSE").history(period="5y", interval="1mo")["Close"].pct_change().dropna()
-            comb = pd.concat([p_hist, idx_hist], axis=1).dropna()
-            if len(comb) >= 12:
-                cov = comb.cov().iloc[0, 1]
-                var_m = comb.iloc[:, 1].var()
-                if var_m > 0:
-                    beta = float(cov / var_m)
-        except Exception:
-            beta = None
+    # 5-Year monthly regression Beta against the Jakarta Composite Index (^JKSE)
+    reg_beta = None
+    try:
+        p_hist = t.history(period="5y", interval="1mo")["Close"].pct_change().dropna()
+        idx_hist = yf.Ticker("^JKSE").history(period="5y", interval="1mo")["Close"].pct_change().dropna()
+        comb = pd.concat([p_hist, idx_hist], axis=1).dropna()
+        if len(comb) >= 12:
+            cov = comb.cov().iloc[0, 1]
+            var_m = comb.iloc[:, 1].var()
+            if var_m > 0:
+                reg_beta = float(cov / var_m)
+    except Exception:
+        reg_beta = None
+
+    if reg_beta is not None and math.isfinite(reg_beta):
+        beta = reg_beta
+    else:
+        # Fallback to yfinance reported beta or default 1.0
+        beta = number(info.get("beta")) or 1.0
 
     # Handle financial currency conversion for USD-reporting IDX issuers
     fin_curr = info.get("financialCurrency", "IDR")
@@ -279,8 +283,8 @@ IDX_INDUSTRY_PEERS = {
     "Drug Manufacturers - General": ["KLBF", "SIDO", "TSPC", "KAEF"],
     # Cement & Building
     "Building Materials": ["SMGR", "INTP", "SMBR"],
-    # Industrial Conglomerates / Heavy Equipment
-    "Industrial Conglomerates": ["ASII", "UNTR"],
+    # Industrial Conglomerates / Heavy Equipment & Automotive
+    "Industrial Conglomerates": ["ASII", "UNTR", "AUTO", "SMSM", "IMAS"],
     # Telecom
     "Telecom Services": ["TLKM", "ISAT", "EXCL"],
 }
