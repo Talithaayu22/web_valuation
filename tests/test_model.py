@@ -155,11 +155,62 @@ def test_infer_assumptions_uses_yfinance_beta_and_market_debt_weight(case):
     c, b, _ = case
     company_meta = dict(price=1400., shares=20e9, beta=-0.25)
     inferred = infer_assumptions(c["historical"], b, company_meta)
-    assert inferred.beta == -0.25
+    # Blume adjustment: 0.67 * (-0.25) + 0.33 = 0.1625 -> constrained by floor >= 0.65
+    assert inferred.beta == 0.65
+
+    company_meta_pos = dict(price=1400., shares=20e9, beta=1.20)
+    inferred_pos = infer_assumptions(c["historical"], b, company_meta_pos)
+    assert inferred_pos.beta == pytest.approx(1.1340)
     # Total debt = short_debt (300) + long_debt (1700) = 2000 bn
     # Market Cap = 1400 * 20e9 / 1e9 = 28000 bn
     # Debt weight = 2000 / (2000 + 28000) = 2000 / 30000 = ~6.67%
     assert inferred.debt_weight == pytest.approx(2000. / 30000., abs=0.005)
+
+
+def test_ebit_sanity_validation_corrects_yahoo_sign_inversion():
+    dates = [pd.Timestamp("2024-12-31")]
+    inc_df = pd.DataFrame({
+        dates[0]: {
+            "TotalRevenue": 10000.0 * 1e9,
+            "CostOfRevenue": 4000.0 * 1e9,
+            "OperatingIncome": 5000.0 * 1e9,  # Distorted by negative OpEx sign bug
+            "EBIT": 2500.0 * 1e9,            # True operating profit
+            "PretaxIncome": 2400.0 * 1e9,
+            "InterestExpense": 100.0 * 1e9,
+            "TaxProvision": 500.0 * 1e9,
+            "NetIncome": 1900.0 * 1e9,
+        }
+    })
+    bs_df = pd.DataFrame({
+        dates[0]: {
+            "CashCashEquivalentsAndShortTermInvestments": 1000.0 * 1e9,
+            "Receivables": 1200.0 * 1e9,
+            "Inventory": 800.0 * 1e9,
+            "CurrentAssets": 3500.0 * 1e9,
+            "NetPPE": 5000.0 * 1e9,
+            "TotalAssets": 9000.0 * 1e9,
+            "AccountsPayable": 700.0 * 1e9,
+            "CurrentDebtAndCapitalLeaseObligation": 300.0 * 1e9,
+            "CurrentLiabilities": 1200.0 * 1e9,
+            "LongTermDebtAndCapitalLeaseObligation": 1000.0 * 1e9,
+            "TotalLiabilitiesNetMinorityInterest": 2500.0 * 1e9,
+            "TotalEquityGrossMinorityInterest": 6500.0 * 1e9,
+        }
+    })
+    cf_df = pd.DataFrame({
+        dates[0]: {
+            "DepreciationAndAmortization": 500.0 * 1e9,
+            "OperatingCashFlow": 2200.0 * 1e9,
+            "CapitalExpenditure": 600.0 * 1e9,
+        }
+    })
+
+    hist, prov = normalize(inc_df, bs_df, cf_df)
+    # Sanitized EBIT should be 2500, not 5000
+    assert hist.loc["ebit", "2024-12-31"] == 2500.0
+    # OpEx = Revenue (10000) - COGS (4000) - D&A (500) - EBIT (2500) = 3000
+    assert hist.loc["opex", "2024-12-31"] == 3000.0
+    assert hist.loc["opex", "2024-12-31"] >= 0.0
 
 
 def test_relative_values_with_pbv():

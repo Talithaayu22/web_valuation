@@ -158,11 +158,15 @@ def infer_assumptions(historical, b, company=None):
         if 0.04 <= eff_debt_rate <= 0.20:
             a.debt_rate = round(eff_debt_rate, 4)
 
-    # Scrape Beta directly from yfinance
+    # Blume's mean-reversion adjusted Beta with institutional floor (Damodaran CAPM alignment)
     if company is not None and company.get("beta") is not None:
         raw_beta = float(company["beta"])
         if math.isfinite(raw_beta):
-            a.beta = round(raw_beta, 4)
+            # Blume's adjustment reverts historical raw beta toward the market mean of 1.0:
+            # Beta_adj = 0.67 * Beta_raw + 0.33 * 1.0
+            # Institutional economic floor of 0.65 prevents negative/ultra-low betas from collapsing WACC below Rf
+            blume_beta = 0.67 * raw_beta + 0.33
+            a.beta = round(max(0.65, blume_beta), 4)
 
     # Terminal state: Year 10 mature growth converges to terminal growth
     a.mature_growth = a.terminal_growth

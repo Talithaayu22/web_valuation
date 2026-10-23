@@ -82,13 +82,36 @@ def normalize(income, balance, cashflow):
         if da is None:
             da = inc("ReconciledDepreciation", "DepreciationAndAmortizationInIncomeStatement")
         put("da", abs(da) if da is not None else None, "Reported: D&A; used as total operating D&A")
-        ebit = inc("OperatingIncome", "EBIT")
+        interest = inc("InterestExpense", "InterestExpenseNonOperating")
+        interest_val = abs(interest) if interest is not None else 0.0
+        put("interest", abs(interest) if interest is not None else None, "Reported: interest expense")
+
+        # EBIT sanity validation: check for Yahoo Finance sign inversion where negative OpEx inflates OperatingIncome
+        op_inc = inc("OperatingIncome")
+        ebit_rep = inc("EBIT")
+        pretax = inc("PretaxIncome")
+
+        if op_inc is not None and pretax is not None and pretax > 0 and op_inc > pretax * 1.30:
+            if ebit_rep is not None and abs(ebit_rep - pretax) < abs(op_inc - pretax):
+                ebit = ebit_rep
+            else:
+                ebit = pretax + interest_val
+        elif op_inc is not None:
+            ebit = op_inc
+        elif ebit_rep is not None:
+            ebit = ebit_rep
+        elif pretax is not None:
+            ebit = pretax + interest_val
+        else:
+            ebit = None
+
         # EBITDA - EBIT provides a useful fallback when cash-flow D&A is absent.
         if p["da"] is None:
             put("da", subtract(inc("EBITDA"), ebit), "Calculated: EBITDA less EBIT")
-        put("opex", subtract(p["revenue"], p["cogs"], p["da"], ebit), "Calculated: revenue − COGS − D&A − EBIT")
-        interest = inc("InterestExpense", "InterestExpenseNonOperating")
-        put("interest", abs(interest) if interest is not None else None, "Reported: interest expense")
+        raw_opex = subtract(p["revenue"], p["cogs"], p["da"], ebit)
+        if raw_opex is not None and raw_opex < 0:
+            raw_opex = 0.0
+        put("opex", raw_opex, "Calculated: revenue − COGS − D&A − EBIT")
         put("tax", inc("TaxProvision"), "Reported: tax provision")
         put("net_income", inc("NetIncomeCommonStockholders", "NetIncome"), "Reported: common-shareholder net income where available")
 
