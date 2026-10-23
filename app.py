@@ -267,6 +267,41 @@ with assumptions_tab:
         st.form_submit_button("Apply assumptions", type="primary", use_container_width=True)
     a = Assumptions(**fields)
 
+    # Macro convergence & GDP ceiling warning (Damodaran Boundary)
+    if a.terminal_growth > 0.040:
+        st.warning(
+            f"⚠️ **Damodaran Macro Ceiling Alert**: Terminal growth ({a.terminal_growth:.1%}) exceeds the sustainable "
+            f"Indonesian nominal GDP growth ceiling (4.00%). In academic valuation theory, steady-state firms cannot "
+            f"permanently outgrow the broader macroeconomy into perpetuity."
+        )
+    elif a.terminal_growth >= a.wacc:
+        st.error(
+            f"⛔ **Convergence Violation**: Terminal growth ({a.terminal_growth:.2%}) must be strictly less than WACC "
+            f"({a.wacc:.2%}) to avoid mathematical singularity in Gordon Growth Terminal Value."
+        )
+
+    # Phased Horizon Academic Justification Cards
+    with st.expander("📘 Academic Rationale & 10-Year Phased Horizon (MM6026 Rubric)", expanded=False):
+        p_col1, p_col2, p_col3 = st.columns(3)
+        with p_col1:
+            st.markdown("##### Phase 1 · Expansion (Y1–5)")
+            st.caption(
+                "Reflects company-specific operational momentum, backlog execution, and reinvestment capacity. "
+                "Operating margins and CapEx intensity are anchored to audited multi-year medians."
+            )
+        with p_col2:
+            st.markdown("##### Phase 2 · Convergence (Y6–10)")
+            st.caption(
+                "Abnormal competitive advantages (economic moats) gradually dissipate under market competition. "
+                "Growth rates and operating margins linearly fade toward macroeconomic equilibrium."
+            )
+        with p_col3:
+            st.markdown("##### Phase 3 · Steady State (Perpetuity)")
+            st.caption(
+                "Perpetual growth is bounded by Bank Indonesia's central inflation target (2.50%) with zero perpetual "
+                "volume expansion. Terminal reinvestment is disciplined by sustainable ROIC (g / ROIC)."
+            )
+
 with st.sidebar:
     st.divider()
     st.markdown("### Model assumptions")
@@ -479,6 +514,28 @@ with overview:
             yaxis=dict(autorange="reversed")
         )
         chart(fig_ff, "IDR / share")
+
+    # 5. Calculation Inspector & Mathematical Proofs (KaTeX Formula Audit)
+    with st.expander("🔍 Calculation Inspector & Mathematical Proofs (KaTeX Formula Audit)", expanded=False):
+        c_p1, c_p2 = st.columns(2)
+        with c_p1:
+            st.markdown("##### 1. Cost of Capital Deconstruction (CAPM & WACC)")
+            total_erp = a.mature_equity_premium + a.country_risk_premium
+            kd_after = a.debt_rate * (1 - a.tax_rate)
+            we = 1 - a.debt_weight
+            st.latex(rf"\text{{Total ERP}} = \text{{Mature ERP}} + \text{{CRP}} = {a.mature_equity_premium*100:.2f}\% + {a.country_risk_premium*100:.2f}\% = {total_erp*100:.2f}\%")
+            st.latex(rf"K_e = R_f + \beta \times \text{{Total ERP}} = {a.risk_free*100:.2f}\% + ({a.beta:.2f} \times {total_erp*100:.2f}\%) = {a.cost_of_equity*100:.2f}\%")
+            st.latex(rf"K_{{d,\text{{after}}}} = K_d \times (1 - t) = {a.debt_rate*100:.2f}\% \times (1 - {a.tax_rate*100:.1f}\%) = {kd_after*100:.2f}\%")
+            st.latex(rf"\text{{WACC}} = (W_e \times K_e) + (W_d \times K_{{d,\text{{after}}}}) = ({we*100:.1f}\% \times {a.cost_of_equity*100:.2f}\%) + ({a.debt_weight*100:.1f}\% \times {kd_after*100:.2f}\%) = {a.wacc*100:.2f}\%")
+
+        with c_p2:
+            st.markdown("##### 2. Terminal Value & Enterprise-to-Equity Bridge")
+            if result:
+                reinv_rate = result.get('terminal_reinvestment_rate', a.terminal_growth / a.terminal_roic)
+                st.latex(rf"\text{{Reinvestment Rate}} = \frac{{g}}{{\text{{ROIC}}}} = \frac{{{a.terminal_growth*100:.2f}\%}}{{{a.terminal_roic*100:.1f}\%}} = {reinv_rate*100:.1f}\%")
+                st.latex(rf"\text{{Terminal Value}} = \frac{{\text{{NOPAT}}_{{11}} \times (1 - \text{{Reinv}})}}{{WACC - g}} = \frac{{{result['terminal_fcff']:,.1f}}}{{{a.wacc*100:.2f}\% - {a.terminal_growth*100:.2f}\%}} = \text{{Rp }}{result['terminal_value']:,.1f}\text{{ bn}}")
+                st.latex(rf"\text{{Equity Value}} = \text{{EV}} + \text{{Cash}} - \text{{Debt}} - \text{{Claims}} = \text{{Rp }}{result['equity_value']:,.1f}\text{{ bn}}")
+                st.latex(rf"\text{{DCF Value per Share}} = \frac{{\text{{Equity Value}}}}{{\text{{Shares}}}} = \frac{{{result['equity_value']:,.1f}\text{{ bn}}}}{{{shares:.3f}\text{{ bn}}}} = \mathbf{{\text{{Rp }}{result['price']:,.0f}}}")
     l, r = st.columns([1.65, 1])
     with l:
         st.markdown("### The business behind the valuation")
