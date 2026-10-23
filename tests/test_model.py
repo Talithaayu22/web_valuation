@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from openpyxl import load_workbook
 from valuation.data import demo_company, normalize, ticker_symbol, peer_record
-from valuation.model import Assumptions, BASE_FIELDS, base_check, forecast, dcf, sensitivity, default_drivers, relative_values, infer_assumptions, composite_relative_value, blended_valuation
+from valuation.model import (Assumptions, BASE_FIELDS, base_check, forecast, dcf, sensitivity, default_drivers, relative_values, infer_assumptions, composite_relative_value, blended_valuation, evaluate_approach_weights, investment_recommendation)
 from valuation.data import rank_peers_similarity
 from valuation.export import workbook
 
@@ -208,3 +208,39 @@ def test_peer_similarity_ranking_by_ebitda_margin_and_der():
     assert ranked[0]['ticker'] == 'CLOSE'
     assert ranked[1]['ticker'] == 'MEDIUM'
     assert ranked[2]['ticker'] == 'FAR'
+
+
+def test_evaluate_approach_weights_rule_1_and_rule_2():
+    target = dict(ebitda_margin=0.20, der=0.50, industry='Thermal Coal')
+    # Case A: Insufficient peers (< 2 peers) -> Rule 1 shifts to 100% DCF
+    r_empty = evaluate_approach_weights(target, [])
+    assert r_empty['dcf_weight'] == 1.0
+    assert r_empty['rel_weight'] == 0.0
+    assert not r_empty['peers_valid']
+
+    # Case B: 2 valid peers -> Rule 1 (75% DCF) & Rule 2 (25% Relative)
+    peers = [
+        dict(ticker='P1', ev=100.0, ebitda_margin=0.22, der=0.55),
+        dict(ticker='P2', ev=150.0, ebitda_margin=0.18, der=0.45),
+    ]
+    r_valid = evaluate_approach_weights(target, peers)
+    assert r_valid['dcf_weight'] == 0.75
+    assert r_valid['rel_weight'] == 0.25
+    assert r_valid['peers_valid']
+    assert 'Rule 1 & Rule 2 Active' in r_valid['rationale']
+
+
+def test_investment_recommendation_hurdles():
+    # Buy: +20% upside (> +15% hurdle)
+    buy = investment_recommendation(reference_price=1000.0, blended_price=1200.0, hurdle_rate=0.15)
+    assert buy['rating'] == 'BUY / OVERWEIGHT'
+    assert buy['upside'] == pytest.approx(0.20)
+
+    # Hold: +5% upside (within [-15%, +15%] neutral band)
+    hold = investment_recommendation(reference_price=1000.0, blended_price=1050.0, hurdle_rate=0.15)
+    assert hold['rating'] == 'HOLD / NEUTRAL'
+
+    # Sell: -20% downside (< -15% hurdle)
+    sell = investment_recommendation(reference_price=1000.0, blended_price=800.0, hurdle_rate=0.15)
+    assert sell['rating'] == 'SELL / UNDERWEIGHT'
+    assert sell['upside'] == pytest.approx(-0.20)

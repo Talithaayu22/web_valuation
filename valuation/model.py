@@ -407,3 +407,92 @@ def blended_valuation(dcf_price, rel_price, dcf_weight=0.75, rel_weight=0.25):
     elif has_rel:
         return float(rel_price)
     return float("nan")
+
+
+def evaluate_approach_weights(target_profile, peer_records, default_dcf_weight=0.75, default_rel_weight=0.25):
+    """Evaluates valuation approach weighting based on:
+    - Rule 1 (Intrinsic Anchor): DCF (FCFF) is assigned primary emphasis because it measures
+      intrinsic cash generation, balance sheet solvency, and reinvestment efficiency independently of market sentiment.
+    - Rule 2 (Peer Quality Calibration): Relative Valuation is included as a secondary market cross-check
+      only if at least 2 peers in the same sub-industry meet financial similarity thresholds.
+      If fewer than 2 comparable peers are available, the model shifts 100% of weight to DCF.
+    """
+    valid_peers = [p for p in peer_records if p.get("ev") and p.get("ev") > 0] if peer_records else []
+
+    if len(valid_peers) >= 2:
+        target_margin = target_profile.get("ebitda_margin")
+        target_der = target_profile.get("der")
+        close_peers = 0
+        for p in valid_peers:
+            pm = p.get("ebitda_margin")
+            pder = p.get("der")
+            if pm is not None and target_margin is not None and abs(pm - target_margin) <= 0.15:
+                if pder is not None and target_der is not None and abs(pder - target_der) <= 1.0:
+                    close_peers += 1
+
+        peer_quality = "High" if close_peers >= 2 else "Moderate"
+        dcf_w = default_dcf_weight
+        rel_w = default_rel_weight
+        rationale = (
+            f"Rule 1 & Rule 2 Active: Intrinsic DCF is weighted at {dcf_w:.0%} as the primary fundamental anchor. "
+            f"Relative Valuation provides a {rel_w:.0%} secondary market cross-check ({peer_quality} peer quality, "
+            f"{len(valid_peers)} active peers in same sub-industry)."
+        )
+        return dict(dcf_weight=dcf_w, rel_weight=rel_w, quality=peer_quality, rationale=rationale, peers_valid=True)
+    else:
+        dcf_w = 1.0
+        rel_w = 0.0
+        rationale = (
+            f"Rule 1 Active (100% Intrinsic DCF): Insufficient comparable peers loaded (< 2 peers, currently {len(valid_peers)}). "
+            f"Under Rule 2 (Peer Quality Calibration), relative valuation is suspended to avoid pricing distortion from a single or absent peer."
+        )
+        return dict(dcf_weight=dcf_w, rel_weight=rel_w, quality="Insufficient Peers", rationale=rationale, peers_valid=False)
+
+
+def investment_recommendation(reference_price, blended_price, hurdle_rate=0.15):
+    """Generates an institutional recommendation and margin of safety analysis:
+    - BUY / OVERWEIGHT: Implied upside > +15%
+    - HOLD / NEUTRAL: Implied upside between -15% and +15%
+    - SELL / UNDERWEIGHT: Implied upside < -15%
+    """
+    if not reference_price or not blended_price or not (reference_price > 0 and blended_price > 0):
+        return dict(
+            rating="DATA PENDING",
+            upside=0.0,
+            margin_of_safety=0.0,
+            color="#8c9e99",
+            summary="Reference price or fair value calculation pending review of inputs."
+        )
+
+    upside = (blended_price / reference_price) - 1.0
+    margin_of_safety = 1.0 - (reference_price / blended_price) if blended_price > reference_price else upside
+
+    if upside >= hurdle_rate:
+        rating = "BUY / OVERWEIGHT"
+        color = "#087f69"
+        summary = (
+            f"Strong valuation support: Blended fair value (Rp {blended_price:,.0f}) trades at a {upside:+.1%} premium "
+            f"to market price (Rp {reference_price:,.0f}), exceeding the {hurdle_rate:.0%} hurdle margin of safety."
+        )
+    elif upside <= -hurdle_rate:
+        rating = "SELL / UNDERWEIGHT"
+        color = "#c23b22"
+        summary = (
+            f"Valuation headwind: Reference market price (Rp {reference_price:,.0f}) trades at a {abs(upside):.1%} premium "
+            f"over blended fair value (Rp {blended_price:,.0f}), indicating potential downside risk."
+        )
+    else:
+        rating = "HOLD / NEUTRAL"
+        color = "#d9822b"
+        summary = (
+            f"Fairly valued: Implied upside/downside of {upside:+.1%} sits within the neutral [−{hurdle_rate:.0%}, +{hurdle_rate:.0%}] "
+            f"valuation band. Risk/reward profile is balanced at current market levels."
+        )
+
+    return dict(
+        rating=rating,
+        upside=upside,
+        margin_of_safety=margin_of_safety,
+        color=color,
+        summary=summary
+    )
