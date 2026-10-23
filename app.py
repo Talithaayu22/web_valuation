@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from valuation.data import (
-    CATALOG, BILLION, demo_company, peer_record, ticker_symbol,
+    CATALOG, BILLION, demo_company, fetch_company, peer_record, ticker_symbol,
     get_default_peers_for_ticker, rank_peers_similarity
 )
 from valuation.model import (
