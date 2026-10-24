@@ -63,7 +63,7 @@ class Assumptions:
     dcf_weight: float = 0.75
     relative_weight: float = 0.25
     scenario_shift: float = 0.02
-    scenario_mode: str = "Operational Corridor (Fixed Macro)"
+    scenario_mode: str = "Coherent Macro & Operating World"
     bear_growth_shift: float = -0.02
     bull_growth_shift: float = 0.02
     bear_margin_shift: float = -0.02

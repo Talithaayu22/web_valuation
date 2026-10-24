@@ -500,31 +500,18 @@ with assumptions_tab:
                 help="Weight assigned to Comparable Peers relative valuation in the blended fair value. Default 25% provides an empirical market cross-check when peer similarity criteria are met."
             )
 
-            # Scenario Modeling Paradigm & Parameter Controls
+            # Scenario Modeling: Coherent Macro & Operating World
             st.markdown("---")
-            st.markdown("**Scenario modeling paradigm**")
-            scenario_mode_opts = ["Operational Corridor (Fixed Macro)", "Coherent Macro & Operating World"]
-            saved_mode = saved.get("scenario_mode", getattr(initial, "scenario_mode", "Operational Corridor (Fixed Macro)"))
-            mode_idx = 1 if saved_mode == "Coherent Macro & Operating World" else 0
-            scenario_mode = st.radio(
-                "Scenario mode",
-                scenario_mode_opts,
-                index=mode_idx,
-                key=key("scenario_mode"),
-                help=(
-                    "• Operational Corridor: Isolates internal company execution risk (Growth and Margin). Macro WACC and terminal growth remain fixed.\n"
-                    "• Coherent Macro World: Simulates systemic cycles (Bull boom vs. Bear recession) shifting both operating execution and capital market discount/growth rates."
-                ),
-                label_visibility="collapsed"
-            )
-            fields["scenario_mode"] = scenario_mode
+            st.markdown("##### ◈ Scenario Modeling · Coherent Macro & Operating World")
+            st.caption("Simulates macroeconomic and operational regimes across Bear, Base, and Bull cases. Stresses operating execution alongside capital market discount rates and reinvestment intensity.")
+            fields["scenario_mode"] = "Coherent Macro & Operating World"
 
             pct("Master scenario shift · Bull/Bear (+/- %)", "scenario_shift", 0, 20, 
                 help="Base symmetric deviation applied to Bull/Bear cases. Default 2.0% translates to ±2.0% on revenue growth and EBIT margins.")
 
-            # Expandable Fine-Tuning Calibration
-            with st.expander("⚙️ Scenario Calibration (Fine-Tune Drivers)", expanded=False):
-                st.caption("Customize specific deviations for Bull and Bear scenarios beyond the master shift.")
+            # Expandable Fine-Tuning Calibration (All 6 drivers unconditionally available)
+            with st.expander("⚙️ Scenario Calibration (Bear & Bull Deviations)", expanded=True):
+                st.caption("Customize specific deviations for Bull and Bear scenarios across operating, macro discount, and reinvestment drivers.")
                 master_s = fields.get("scenario_shift", initial.scenario_shift) * 100
 
                 sc_c1, sc_c2 = st.columns(2)
@@ -538,28 +525,22 @@ with assumptions_tab:
                         "EBIT margin shift (%)", value=float(saved.get("bear_margin_shift", getattr(initial, "bear_margin_shift", -master_s / 100)) * 100),
                         step=0.25, key=key("bear_margin_shift"), help="Percentage points added to EBIT margin in Bear scenario."
                     ) / 100
-                    if scenario_mode == "Coherent Macro & Operating World":
-                        fields["bear_wacc_shift"] = st.number_input(
-                            "WACC shift (%)", value=float(saved.get("bear_wacc_shift", getattr(initial, "bear_wacc_shift", 0.005)) * 100),
-                            step=0.10, key=key("bear_wacc_shift"), help="Credit spread / risk premium expansion in distress."
-                        ) / 100
-                        fields["bear_g_shift"] = st.number_input(
-                            "Terminal growth shift (%)", value=float(saved.get("bear_g_shift", getattr(initial, "bear_g_shift", -0.005)) * 100),
-                            step=0.10, key=key("bear_g_shift"), help="Long-term economic slowdown."
-                        ) / 100
-                        fields["bear_roic_shift"] = st.number_input(
-                            "Terminal ROIC shift (%)", value=float(saved.get("bear_roic_shift", getattr(initial, "bear_roic_shift", -0.010)) * 100),
-                            step=0.25, key=key("bear_roic_shift"), help="Moat erosion under economic pressure."
-                        ) / 100
-                        fields["bear_reinvest_shift"] = st.number_input(
-                            "CapEx & NWC drag (%)", value=float(saved.get("bear_reinvest_shift", getattr(initial, "bear_reinvest_shift", 0.010)) * 100),
-                            step=0.25, key=key("bear_reinvest_shift"), help="Working capital and capital intensity stretch in downturn."
-                        ) / 100
-                    else:
-                        fields["bear_wacc_shift"] = 0.0
-                        fields["bear_g_shift"] = 0.0
-                        fields["bear_roic_shift"] = 0.0
-                        fields["bear_reinvest_shift"] = 0.0
+                    fields["bear_wacc_shift"] = st.number_input(
+                        "WACC shift (%)", value=float(saved.get("bear_wacc_shift", getattr(initial, "bear_wacc_shift", 0.005)) * 100),
+                        step=0.10, key=key("bear_wacc_shift"), help="Credit spread / risk premium expansion in distress."
+                    ) / 100
+                    fields["bear_g_shift"] = st.number_input(
+                        "Terminal growth shift (%)", value=float(saved.get("bear_g_shift", getattr(initial, "bear_g_shift", -0.005)) * 100),
+                        step=0.10, key=key("bear_g_shift"), help="Long-term economic slowdown."
+                    ) / 100
+                    fields["bear_roic_shift"] = st.number_input(
+                        "Terminal ROIC shift (%)", value=float(saved.get("bear_roic_shift", getattr(initial, "bear_roic_shift", -0.010)) * 100),
+                        step=0.25, key=key("bear_roic_shift"), help="Moat erosion under economic pressure."
+                    ) / 100
+                    fields["bear_reinvest_shift"] = st.number_input(
+                        "CapEx & NWC drag (%)", value=float(saved.get("bear_reinvest_shift", getattr(initial, "bear_reinvest_shift", 0.010)) * 100),
+                        step=0.25, key=key("bear_reinvest_shift"), help="Working capital and capital intensity stretch in downturn."
+                    ) / 100
 
                 with sc_c2:
                     st.markdown("**Bull Scenario**")
@@ -571,28 +552,22 @@ with assumptions_tab:
                         "EBIT margin shift (%)", value=float(saved.get("bull_margin_shift", getattr(initial, "bull_margin_shift", master_s / 100)) * 100),
                         step=0.25, key=key("bull_margin_shift"), help="Percentage points added to EBIT margin in Bull scenario."
                     ) / 100
-                    if scenario_mode == "Coherent Macro & Operating World":
-                        fields["bull_wacc_shift"] = st.number_input(
-                            "WACC shift (%)", value=float(saved.get("bull_wacc_shift", getattr(initial, "bull_wacc_shift", -0.50)) * 100 if abs(getattr(initial, "bull_wacc_shift", -0.005)) > 0.05 else getattr(initial, "bull_wacc_shift", -0.005) * 100),
-                            step=0.10, key=key("bull_wacc_shift"), help="Risk premium compression in economic expansion."
-                        ) / 100
-                        fields["bull_g_shift"] = st.number_input(
-                            "Terminal growth shift (%)", value=float(saved.get("bull_g_shift", getattr(initial, "bull_g_shift", 0.005)) * 100),
-                            step=0.10, key=key("bull_g_shift"), help="Higher sustainable economic growth."
-                        ) / 100
-                        fields["bull_roic_shift"] = st.number_input(
-                            "Terminal ROIC shift (%)", value=float(saved.get("bull_roic_shift", getattr(initial, "bull_roic_shift", 0.010)) * 100),
-                            step=0.25, key=key("bull_roic_shift"), help="Enhanced returns on capital during expansion."
-                        ) / 100
-                        fields["bull_reinvest_shift"] = st.number_input(
-                            "CapEx & NWC boost (%)", value=float(saved.get("bull_reinvest_shift", getattr(initial, "bull_reinvest_shift", -0.010)) * 100),
-                            step=0.25, key=key("bull_reinvest_shift"), help="Operational and capital efficiency improvement."
-                        ) / 100
-                    else:
-                        fields["bull_wacc_shift"] = 0.0
-                        fields["bull_g_shift"] = 0.0
-                        fields["bull_roic_shift"] = 0.0
-                        fields["bull_reinvest_shift"] = 0.0
+                    fields["bull_wacc_shift"] = st.number_input(
+                        "WACC shift (%)", value=float(saved.get("bull_wacc_shift", getattr(initial, "bull_wacc_shift", -0.005)) * 100),
+                        step=0.10, key=key("bull_wacc_shift"), help="Risk premium compression in economic expansion."
+                    ) / 100
+                    fields["bull_g_shift"] = st.number_input(
+                        "Terminal growth shift (%)", value=float(saved.get("bull_g_shift", getattr(initial, "bull_g_shift", 0.005)) * 100),
+                        step=0.10, key=key("bull_g_shift"), help="Higher sustainable economic growth."
+                    ) / 100
+                    fields["bull_roic_shift"] = st.number_input(
+                        "Terminal ROIC shift (%)", value=float(saved.get("bull_roic_shift", getattr(initial, "bull_roic_shift", 0.010)) * 100),
+                        step=0.25, key=key("bull_roic_shift"), help="Enhanced returns on capital during expansion."
+                    ) / 100
+                    fields["bull_reinvest_shift"] = st.number_input(
+                        "CapEx & NWC boost (%)", value=float(saved.get("bull_reinvest_shift", getattr(initial, "bull_reinvest_shift", -0.010)) * 100),
+                        step=0.25, key=key("bull_reinvest_shift"), help="Operational and capital efficiency improvement."
+                    ) / 100
 
             fields["other_claims"] = st.number_input("Minorities / other equity claims (IDR bn)", min_value=0., value=float(initial.other_claims), key=key("claims"), help="Deducts reported minority interests (NCI) from EV to bridge to Equity Value.")
             fields["nonoperating_assets"] = st.number_input("Additional non-operating assets (IDR bn)", min_value=0., value=float(initial.nonoperating_assets), key=key("nonop"), help="Adds non-operating investments / associates to EV.")
@@ -670,10 +645,10 @@ scenario_configs = [
         "label": "Bear",
         "growth_shift": getattr(a, "bear_growth_shift", -a.scenario_shift),
         "margin_shift": getattr(a, "bear_margin_shift", -a.scenario_shift),
-        "wacc_shift": getattr(a, "bear_wacc_shift", 0.005 if "Macro" in getattr(a, "scenario_mode", "") else 0.0),
-        "g_shift": getattr(a, "bear_g_shift", -0.005 if "Macro" in getattr(a, "scenario_mode", "") else 0.0),
-        "roic_shift": getattr(a, "bear_roic_shift", -0.010 if "Macro" in getattr(a, "scenario_mode", "") else 0.0),
-        "reinvest_shift": getattr(a, "bear_reinvest_shift", 0.010 if "Macro" in getattr(a, "scenario_mode", "") else 0.0),
+        "wacc_shift": getattr(a, "bear_wacc_shift", 0.005),
+        "g_shift": getattr(a, "bear_g_shift", -0.005),
+        "roic_shift": getattr(a, "bear_roic_shift", -0.010),
+        "reinvest_shift": getattr(a, "bear_reinvest_shift", 0.010),
     },
     {
         "label": "Base",
@@ -688,10 +663,10 @@ scenario_configs = [
         "label": "Bull",
         "growth_shift": getattr(a, "bull_growth_shift", a.scenario_shift),
         "margin_shift": getattr(a, "bull_margin_shift", a.scenario_shift),
-        "wacc_shift": getattr(a, "bull_wacc_shift", -0.005 if "Macro" in getattr(a, "scenario_mode", "") else 0.0),
-        "g_shift": getattr(a, "bull_g_shift", 0.005 if "Macro" in getattr(a, "scenario_mode", "") else 0.0),
-        "roic_shift": getattr(a, "bull_roic_shift", 0.010 if "Macro" in getattr(a, "scenario_mode", "") else 0.0),
-        "reinvest_shift": getattr(a, "bull_reinvest_shift", -0.010 if "Macro" in getattr(a, "scenario_mode", "") else 0.0),
+        "wacc_shift": getattr(a, "bull_wacc_shift", -0.005),
+        "g_shift": getattr(a, "bull_g_shift", 0.005),
+        "roic_shift": getattr(a, "bull_roic_shift", 0.010),
+        "reinvest_shift": getattr(a, "bull_reinvest_shift", -0.010),
     },
 ]
 
@@ -730,10 +705,9 @@ for cfg in scenario_configs:
             "Year 5 revenue": sf.iloc[-1].revenue,
             "Year 5 EBIT": sf.iloc[-1].ebit,
             "WACC": sa.wacc,
+            "Terminal growth": sa.terminal_growth,
+            "Terminal ROIC": sa.terminal_roic,
         }
-        if "Macro" in getattr(a, "scenario_mode", ""):
-            row_dict["Terminal growth"] = sa.terminal_growth
-            row_dict["Terminal ROIC"] = sa.terminal_roic
         scenario_rows.append(row_dict)
     except Exception:
         row_dict = {
@@ -743,10 +717,9 @@ for cfg in scenario_configs:
             "Year 5 revenue": float("nan"),
             "Year 5 EBIT": float("nan"),
             "WACC": sa.wacc,
+            "Terminal growth": sa.terminal_growth,
+            "Terminal ROIC": sa.terminal_roic,
         }
-        if "Macro" in getattr(a, "scenario_mode", ""):
-            row_dict["Terminal growth"] = sa.terminal_growth
-            row_dict["Terminal ROIC"] = sa.terminal_roic
         scenario_rows.append(row_dict)
 
 # Prepare peer context and blended valuation
@@ -1075,16 +1048,10 @@ with dcf_tab:
             format_dict["Terminal ROIC"] = "{:.2%}"
 
         st.dataframe(scen_df.style.format(format_dict, na_rep="—"), width="stretch")
-        if "Macro" in getattr(a, "scenario_mode", ""):
-            st.caption(
-                "💡 **Active Mode: Coherent Macro & Operating World**. Scenarios stress operating growth & margins alongside macroeconomic risk "
-                "(WACC spread expansion/compression, terminal growth deceleration/acceleration, terminal ROIC, and reinvestment drag)."
-            )
-        else:
-            st.caption(
-                "💡 **Active Mode: Operational Corridor (Fixed Macro)**. Scenarios reflect pure company execution risk (revenue growth & operating margins). "
-                "Discount rate sensitivity is tested independently in the 2D Heatmap above."
-            )
+        st.caption(
+            "💡 **Coherent Macro & Operating World**. Scenarios stress operating execution (revenue growth, operating margins, CapEx, and working capital) "
+            "alongside macroeconomic discount rates (WACC), perpetual terminal growth (g), and terminal ROIC."
+        )
     else:
         st.warning("Review WACC, terminal growth, terminal ROIC, shares, and year-5 earnings to calculate DCF.")
 

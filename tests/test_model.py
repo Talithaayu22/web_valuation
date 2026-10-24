@@ -726,7 +726,7 @@ def test_scenario_modeling_modes_and_parameters(case):
     c, b, a = case
     # Verify Assumptions includes scenario defaults
     assert hasattr(a, "scenario_mode")
-    assert a.scenario_mode == "Operational Corridor (Fixed Macro)"
+    assert a.scenario_mode == "Coherent Macro & Operating World"
     assert a.bear_growth_shift == -0.02
     assert a.bull_growth_shift == 0.02
     assert a.bear_wacc_shift == 0.005
