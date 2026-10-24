@@ -513,15 +513,15 @@ with assumptions_tab:
             pct("Master scenario shift · Bull/Bear (+/- %)", "scenario_shift", 0, 20, 
                 help="Base symmetric deviation applied to Bull/Bear cases. Default 2.0% translates to ±2.0% on revenue growth and EBIT margins.")
         with sc_top_c2:
-            st.info("💡 **Coherent Macro & Operating World**: Fine-tune specific operating, macro discount rate, and reinvestment deviations in the calibration panel below.")
+            st.info("**Coherent Macro & Operating World**: Fine-tune specific operating, macro discount rate, and reinvestment deviations in the calibration panel below.")
 
-        with st.expander("⚙️ Scenario Calibration (Bear & Bull Deviations)", expanded=True):
+        with st.expander("Scenario Calibration (Bear & Bull Deviations)", expanded=True):
             st.caption("Customize specific deviations for Bull and Bear scenarios across operating, macro discount, and reinvestment drivers.")
             master_s = fields.get("scenario_shift", initial.scenario_shift) * 100
 
             sc_c1, sc_c2 = st.columns(2)
             with sc_c1:
-                st.markdown("##### 🐻 Bear Scenario (Economic Downturn)")
+                st.markdown("##### Bear Scenario (Economic Downturn)")
                 fields["bear_growth_shift"] = st.number_input(
                     "Revenue growth shift (%)", value=float(saved.get("bear_growth_shift", getattr(initial, "bear_growth_shift", -master_s / 100)) * 100),
                     step=0.25, key=key("bear_growth_shift"), help="Percentage points added to revenue growth in Bear scenario."
@@ -548,7 +548,7 @@ with assumptions_tab:
                 ) / 100
 
             with sc_c2:
-                st.markdown("##### 🐂 Bull Scenario (Economic Expansion)")
+                st.markdown("##### Bull Scenario (Economic Expansion)")
                 fields["bull_growth_shift"] = st.number_input(
                     "Revenue growth shift (%)", value=float(saved.get("bull_growth_shift", getattr(initial, "bull_growth_shift", master_s / 100)) * 100),
                     step=0.25, key=key("bull_growth_shift"), help="Percentage points added to revenue growth in Bull scenario."
@@ -1051,7 +1051,7 @@ with dcf_tab:
 
         st.dataframe(scen_df.style.format(format_dict, na_rep="—"), width="stretch")
         st.caption(
-            "💡 **Coherent Macro & Operating World**. Scenarios stress operating execution (revenue growth, operating margins, CapEx, and working capital) "
+            "**Coherent Macro & Operating World**. Scenarios stress operating execution (revenue growth, operating margins, CapEx, and working capital) "
             "alongside macroeconomic discount rates (WACC), perpetual terminal growth (g), and terminal ROIC."
         )
     else:
