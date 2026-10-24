@@ -455,6 +455,10 @@ def rank_peers_similarity(target_profile, candidate_records):
 
         r = dict(rec)
         r["similarity_distance"] = round(dist, 4)
+        score = max(0, min(100, int(round(100.0 / (1.0 + (dist / 1.5))))))
+        confidence = "High" if score >= 75 else ("Moderate" if score >= 50 else "Low")
+        r["similarity_score"] = score
+        r["confidence_level"] = confidence
         ranked.append(r)
 
     ranked.sort(key=lambda x: x["similarity_distance"])

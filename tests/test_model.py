@@ -500,3 +500,50 @@ def test_manual_peer_addition_and_deduplication():
     assert len(removed_peers) == 2
     assert "DEMO1.JK" not in {p["symbol"] for p in removed_peers}
 
+def test_similarity_score_and_confidence_level():
+    from valuation.data import rank_peers_similarity
+
+    target = {"industry": "Thermal Coal", "ebitda_margin": 0.20, "der": 0.50}
+
+    # Peer 1: Exact financial match (dist = 0) -> 100/100, High Confidence
+    p1 = {"ticker": "PERF.JK", "industry": "Thermal Coal", "ebitda_margin": 0.20, "der": 0.50}
+
+    # Peer 2: Close match (dist = 0.40) -> ~79/100, High Confidence
+    p2 = {"ticker": "CLOS.JK", "industry": "Thermal Coal", "ebitda_margin": 0.22, "der": 0.60}
+
+    # Peer 3: Moderate match (dist = 1.20) -> ~56/100, Moderate Confidence
+    p3 = {"ticker": "MODR.JK", "industry": "Thermal Coal", "ebitda_margin": 0.26, "der": 0.80}
+
+    # Peer 4: Distant / different industry match (dist >= 5.0) -> < 50/100, Low Confidence
+    p4 = {"ticker": "DIST.JK", "industry": "Consumer Goods", "ebitda_margin": 0.10, "der": 1.50}
+
+    ranked = rank_peers_similarity(target, [p1, p2, p3, p4])
+    assert len(ranked) == 4
+
+    # Ordering check: distances must be ascending
+    assert ranked[0]["ticker"] == "PERF.JK"
+    assert ranked[1]["ticker"] == "CLOS.JK"
+    assert ranked[2]["ticker"] == "MODR.JK"
+    assert ranked[3]["ticker"] == "DIST.JK"
+
+    # Perfect match checks
+    assert ranked[0]["similarity_distance"] == 0.0
+    assert ranked[0]["similarity_score"] == 100
+    assert ranked[0]["confidence_level"] == "High"
+
+    # Close match checks
+    assert ranked[1]["similarity_score"] >= 75
+    assert ranked[1]["confidence_level"] == "High"
+
+    # Moderate match checks
+    assert 50 <= ranked[2]["similarity_score"] < 75
+    assert ranked[2]["confidence_level"] == "Moderate"
+
+    # Distant match checks
+    assert ranked[3]["similarity_score"] < 50
+    assert ranked[3]["confidence_level"] == "Low"
+
+    # Monotonicity check
+    scores = [r["similarity_score"] for r in ranked]
+    assert scores == sorted(scores, reverse=True)
+

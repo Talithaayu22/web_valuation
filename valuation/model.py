@@ -520,7 +520,11 @@ def explain_peer_selection(target_profile, peer_record):
         else:
             reasons.append(f"DER {peer_der:.2f}x (target {target_der:.2f}x)")
 
-    if dist is not None:
+    score = peer_record.get("similarity_score")
+    conf = peer_record.get("confidence_level")
+    if score is not None:
+        reasons.append(f"similarity score {score}/100 ({conf.lower()} confidence)" if conf else f"similarity score {score}/100")
+    elif dist is not None:
         reasons.append(f"similarity distance {dist:.2f}")
 
     return "; ".join(reasons) if reasons else "Industry comparable peer candidate."

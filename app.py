@@ -774,7 +774,7 @@ with peers_tab:
             "Sub-Industry": target_profile["industry"],
             "EBITDA Margin": f"{target_profile['ebitda_margin']:.1%}",
             "DER (D/E)": f"{target_profile['der']:.2f}x",
-            "Similarity Rank": "0.00 (Benchmark)",
+            "Similarity & Confidence": "100/100 (Benchmark)",
         })
 
         # Columns for checkboxes & removal
@@ -795,6 +795,8 @@ with peers_tab:
             m_val = r_info.get("ebitda_margin")
             der_val = r_info.get("der")
             dist_val = r_info.get("similarity_distance", 0.0)
+            score_val = r_info.get("similarity_score", 100)
+            conf_val = r_info.get("confidence_level", "High")
 
             table_rows.append({
                 "Active": "✅ INCLUDED" if is_inc else "❌ EXCLUDED",
@@ -803,10 +805,11 @@ with peers_tab:
                 "Sub-Industry": pc.get("industry", "Unknown"),
                 "EBITDA Margin": f"{m_val:.1%}" if m_val is not None else "—",
                 "DER (D/E)": f"{der_val:.2f}x" if der_val is not None else "—",
-                "Similarity Rank": f"Rank #{idx+1} (Dist: {dist_val:.2f})",
+                "Similarity & Confidence": f"Rank #{idx+1} · {score_val}/100 ({conf_val} Confidence)",
             })
 
         st.dataframe(pd.DataFrame(table_rows), hide_index=True, width="stretch")
+        st.caption("Similarity score (0–100) measures financial comparability based on EBITDA margin and DER leverage alignment relative to target. Confidence tiers: ≥75 High Confidence (strong match), 50–74 Moderate Confidence, <50 Low Confidence.")
 
 
 
