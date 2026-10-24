@@ -932,23 +932,56 @@ approach_eval = evaluate_approach_weights(target_profile, peer_rows, a.dcf_weigh
 rec = investment_recommendation(price, effective_price)
 
 with overview:
-    # 1. Institutional Recommendation Banner
+    # 1. Institutional Recommendation Banner with Integrated Action Button
     upside_str = (
         f"""<span style="font-size: 14px; color: #5c7080;">Capital Structure: <b>Negative Intrinsic Equity (Insolvent / Restructuring Risk)</b></span>"""
         if rec['rating'] == 'NOT ELIGIBLE' else
         f"""<span style="font-size: 15px; color: #2e3e3b;">Implied Upside: <b>{rec['upside']:+.1%}</b> &nbsp;|&nbsp; Margin of Safety: <b>{rec['margin_of_safety']:.1%}</b></span>"""
     )
-    st.markdown(
-        f"""<div style="background-color: {rec['color']}15; border-left: 5px solid {rec['color']}; padding: 14px 18px; border-radius: 8px; margin: 10px 0 18px;">
-        <span style="font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: {rec['color']}; text-transform: uppercase;">INVESTMENT RECOMMENDATION · MID-TERM DECISION CRITERIA</span>
-        <div style="display: flex; align-items: baseline; gap: 16px; margin: 6px 0 4px; flex-wrap: wrap;">
-            <span style="font-size: 24px; font-weight: 800; color: {rec['color']};">{rec['rating']}</span>
-            {upside_str}
-        </div>
-        <div style="font-size: 13px; color: #435451;">{rec['summary']}</div>
-        </div>""",
-        unsafe_allow_html=True
-    )
+    rec_col, dl_col = st.columns([4.0, 1.2], vertical_alignment="center")
+    with rec_col:
+        st.markdown(
+            f"""<div style="background-color: {rec['color']}15; border-left: 5px solid {rec['color']}; padding: 14px 18px; border-radius: 8px; margin: 10px 0 18px;">
+            <span style="font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: {rec['color']}; text-transform: uppercase;">INVESTMENT RECOMMENDATION · MID-TERM DECISION CRITERIA</span>
+            <div style="display: flex; align-items: baseline; gap: 16px; margin: 6px 0 4px; flex-wrap: wrap;">
+                <span style="font-size: 24px; font-weight: 800; color: {rec['color']};">{rec['rating']}</span>
+                {upside_str}
+            </div>
+            <div style="font-size: 13px; color: #435451;">{rec['summary']}</div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+    with dl_col:
+        try:
+            if generate_valuation_pdf is not None:
+                pdf_report_bytes = generate_valuation_pdf(
+                    company=c,
+                    assumptions=a,
+                    dcf_result=result,
+                    scenario_rows=scenario_rows,
+                    relative_df=relative,
+                    rel_breakdown=rel_breakdown,
+                    rel_price=rel_price,
+                    blended_price=blended_price,
+                    effective_price=effective_price,
+                    expected_dcf_price=expected_dcf_price,
+                    rec=rec,
+                    approach_eval=approach_eval,
+                    peer_rows=peer_rows,
+                )
+                st.download_button(
+                    label="Download PDF Report",
+                    data=pdf_report_bytes,
+                    file_name=f"{c['symbol'].replace('.JK', '')}_Valuation_Report.pdf",
+                    mime="application/pdf",
+                    key=key("dl_pdf_banner"),
+                    type="primary",
+                    use_container_width=True
+                )
+            else:
+                st.info("PDF engine readying...")
+        except Exception as _pdf_err:
+            st.caption(f"PDF generator ready: {_pdf_err}")
 
     # 2. Metric Columns
     cols = st.columns(5)
@@ -1045,52 +1078,7 @@ with overview:
         )
         chart(fig_ff, "IDR / share")
 
-    # 5. Institutional Valuation Report Export Card
-    st.markdown("### Institutional Valuation Report (Downloadable PDF)")
-    c_pdf1, c_pdf2 = st.columns([3, 1.2])
-    with c_pdf1:
-        st.markdown(
-            f"**Executive Valuation Memorandum & Decision Audit ({c['symbol']})**<br/>"
-            f"<span style='color: #5c7080; font-size: 13px;'>"
-            f"Publication-grade 2-page report conforming to Digital Business Valuation specifications. "
-            f"Includes Investment Recommendation ({rec['rating']}), Margin of Safety ({rec['margin_of_safety']:.1%}), "
-            f"Bear/Base/Bull Visual Scenario Valuation, DCF & Relative Bridge, CAPM/WACC Audit, Peer Calibration, and AI Governance."
-            f"</span>",
-            unsafe_allow_html=True
-        )
-    with c_pdf2:
-        try:
-            if generate_valuation_pdf is not None:
-                pdf_report_bytes = generate_valuation_pdf(
-                    company=c,
-                    assumptions=a,
-                    dcf_result=result,
-                    scenario_rows=scenario_rows,
-                    relative_df=relative,
-                    rel_breakdown=rel_breakdown,
-                    rel_price=rel_price,
-                    blended_price=blended_price,
-                    effective_price=effective_price,
-                    expected_dcf_price=expected_dcf_price,
-                    rec=rec,
-                    approach_eval=approach_eval,
-                    peer_rows=peer_rows,
-                )
-                st.download_button(
-                    label="📥 Download Valuation Report (PDF)",
-                    data=pdf_report_bytes,
-                    file_name=f"{c['symbol'].replace('.JK', '')}_Valuation_Report.pdf",
-                    mime="application/pdf",
-                    key=key("dl_pdf_overview"),
-                    type="primary",
-                    use_container_width=True
-                )
-            else:
-                st.info("PDF engine readying...")
-        except Exception as _pdf_err:
-            st.caption(f"PDF generator ready: {_pdf_err}")
-
-    # 6. Calculation Inspector & Mathematical Proofs (KaTeX Formula Audit)
+    # 5. Calculation Inspector & Mathematical Proofs (KaTeX Formula Audit)
     with st.expander("🔍 Calculation Inspector & Mathematical Proofs (KaTeX Formula Audit)", expanded=False):
         c_p1, c_p2 = st.columns(2)
         with c_p1:
