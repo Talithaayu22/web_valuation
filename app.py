@@ -800,6 +800,12 @@ with statements:
                 "assumption. The increase in Total Liabilities is driven entirely by spontaneous operating liabilities (Trade Payables "
                 "and Other Current Liabilities) scaling proportionately with revenue growth."
             )
+        elif title == "Cash flow & funding":
+            st.caption(
+                "💡 **Financing Cash Flow Note**: Under the debt rollover assumption, scheduled debt repayment defaults to zero "
+                "(debt is rolled over at maturity). New borrowing is an automatic liquidity revolver that only activates if operating "
+                "cash flow is insufficient to cover CapEx, dividends, and the minimum cash buffer (2% of revenue)."
+            )
 
 with dcf_tab:
     st.subheader("What are the future cash flows worth?")
