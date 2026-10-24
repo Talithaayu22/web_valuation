@@ -964,3 +964,26 @@ def test_investment_recommendation_handles_negative_dcf_equity():
     assert "Ineligible" in rec["summary"]
 
 
+def test_damodaran_cyclical_commodity_growth_normalization():
+    # A cyclical coal company with flat trailing revenue (e.g. PTBA 2022: 42648 vs 2025: 42651 -> CAGR ~0%)
+    h = pd.DataFrame({
+        "2022-12-31": {"revenue": 42648.0, "capex": 2000.0, "cogs": 30000.0, "opex": 2000.0, "da": 1500.0},
+        "2023-12-31": {"revenue": 38488.0, "capex": 2000.0, "cogs": 28000.0, "opex": 2000.0, "da": 1500.0},
+        "2024-12-31": {"revenue": 42764.0, "capex": 2000.0, "cogs": 31000.0, "opex": 2000.0, "da": 1500.0},
+        "2025-12-31": {"revenue": 42651.0, "capex": 2000.0, "cogs": 31000.0, "opex": 2000.0, "da": 1500.0},
+    })
+    b = {"revenue": 42651.0, "cogs": 31000.0, "opex": 2000.0, "da": 1500.0, "ppe": 20000.0}
+    
+    # 1. Cyclical Coal Company -> Normalized to 3.5%
+    cyclical_co = {"symbol": "PTBA.JK", "sector": "Energy", "industry": "Thermal Coal"}
+    a_cyclical = infer_assumptions(h, b, cyclical_co)
+    assert a_cyclical.growth == pytest.approx(0.035)
+    assert a_cyclical.mature_growth == pytest.approx(0.030)
+
+    # 2. Non-Cyclical Consumer Company -> Not normalized if positive (respects audited 0.00% or small CAGR)
+    non_cyclical_co = {"symbol": "TEST.JK", "sector": "Consumer Defensive", "industry": "Packaged Foods"}
+    a_non_cyclical = infer_assumptions(h, b, non_cyclical_co)
+    assert a_non_cyclical.growth < 0.01
+
+
+

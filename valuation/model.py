@@ -237,19 +237,36 @@ def infer_assumptions(historical, b, company=None):
                 if reported_capex is not None and pd.notna(reported_capex):
                     a.capex_pct = max(0.01, min(0.35, float(reported_capex) / r))
 
-        # Revenue growth: anchor negative cyclical contractions to Indonesian economic baseline (3.5%)
+        # Revenue growth: Damodaran cyclical commodity & economic normalization
         if historical is not None and not historical.empty and "revenue" in historical.index:
             s = historical.loc["revenue"].dropna()
+
+            # Identify cyclical commodity sectors and industries
+            sec = (company.get("sector") or "") if company else ""
+            ind = (company.get("industry") or "") if company else ""
+            is_cyclical = (
+                sec in ("Energy", "Basic Materials") or 
+                any(x in ind.lower() for x in ("coal", "mining", "metal", "oil", "gas", "farm products", "agriculture"))
+            )
+
             if len(s) >= 4 and s.iloc[-4] > 0 and s.iloc[-1] > 0:
                 cagr3 = (float(s.iloc[-1]) / float(s.iloc[-4])) ** (1.0 / 3.0) - 1.0
-                if cagr3 < 0:
-                    # Cyclical commodity normalization: anchor baseline initial growth to Indonesian core economic baseline
+                if is_cyclical and cagr3 < 0.02:
+                    # Damodaran Cyclical Commodity Normalization: Post-peak price corrections
+                    # artificially depress trailing CAGR. Normalize to core Indonesian nominal baseline (3.5%).
+                    a.growth = 0.035
+                elif cagr3 < 0:
                     a.growth = 0.035
                 else:
                     a.growth = max(0.0, min(0.35, cagr3))
             elif len(s) >= 2 and s.iloc[-2] > 0 and s.iloc[-1] > 0:
                 yoy = (float(s.iloc[-1]) / float(s.iloc[-2])) - 1.0
-                a.growth = max(0.0, min(0.35, yoy)) if yoy >= 0 else 0.035
+                if is_cyclical and yoy < 0.02:
+                    a.growth = 0.035
+                elif yoy < 0:
+                    a.growth = 0.035
+                else:
+                    a.growth = max(0.0, min(0.35, yoy))
 
     # Depreciation rate on PPE
     if b.get("ppe", 0) > 0:
