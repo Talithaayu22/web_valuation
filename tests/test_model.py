@@ -720,3 +720,34 @@ def test_terminal_roic_below_median_and_aligned_with_growth(case):
     inferred_high = infer_assumptions(hist_high_growth, b, company_meta)
     # Higher initial growth relative to 2.5% terminal growth yields minimum alpha (0.35), compressing ROIC closer to WACC
     assert inferred_high.terminal_roic <= inferred.terminal_roic
+
+
+def test_scenario_modeling_modes_and_parameters(case):
+    c, b, a = case
+    # Verify Assumptions includes scenario defaults
+    assert hasattr(a, "scenario_mode")
+    assert a.scenario_mode == "Operational Corridor (Fixed Macro)"
+    assert a.bear_growth_shift == -0.02
+    assert a.bull_growth_shift == 0.02
+    assert a.bear_wacc_shift == 0.005
+    assert a.bull_wacc_shift == -0.005
+
+    # Run base DCF
+    f_base = forecast(b, a, 2026)
+    r_base = dcf(f_base, b, a, 8.0)
+    p_base = r_base["price"]
+
+    # Operational Bear (Growth & Margin -2%)
+    d_bear = default_drivers(a, 2026)
+    d_bear["Growth %"] += a.bear_growth_shift * 100
+    d_bear["EBIT margin %"] += a.bear_margin_shift * 100
+    f_bear_op = forecast(b, a, 2026, d_bear)
+    r_bear_op = dcf(f_bear_op, b, a, 8.0)
+
+    # Macro Bear (Operating -2% AND WACC +0.5%, g -0.5%, ROIC -1%)
+    a_bear_macro = replace(a, wacc_override=a.wacc + 0.005, terminal_growth=a.terminal_growth - 0.005, terminal_roic=a.terminal_roic - 0.010)
+    f_bear_macro = forecast(b, a_bear_macro, 2026, d_bear)
+    r_bear_macro = dcf(f_bear_macro, b, a_bear_macro, 8.0)
+
+    # Macro Bear must reflect lower valuation than purely operational Bear due to discount rate expansion
+    assert r_bear_macro["price"] < r_bear_op["price"] < p_base

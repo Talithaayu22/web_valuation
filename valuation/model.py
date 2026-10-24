@@ -63,6 +63,19 @@ class Assumptions:
     dcf_weight: float = 0.75
     relative_weight: float = 0.25
     scenario_shift: float = 0.02
+    scenario_mode: str = "Operational Corridor (Fixed Macro)"
+    bear_growth_shift: float = -0.02
+    bull_growth_shift: float = 0.02
+    bear_margin_shift: float = -0.02
+    bull_margin_shift: float = 0.02
+    bear_wacc_shift: float = 0.005
+    bull_wacc_shift: float = -0.005
+    bear_g_shift: float = -0.005
+    bull_g_shift: float = 0.005
+    bear_roic_shift: float = -0.010
+    bull_roic_shift: float = 0.010
+    bear_reinvest_shift: float = 0.010
+    bull_reinvest_shift: float = -0.010
 
     @property
     def total_equity_premium(self):
@@ -281,7 +294,7 @@ def forecast(b, a, first_year, drivers=None):
     if abs(base_check(b)) > max(0.01, abs(b["equity"]) * 1e-6):
         raise ValueError("Opening balance sheet does not balance. Correct the historical inputs first.")
     for name, value in asdict(a).items():
-        if value is not None and not math.isfinite(value):
+        if isinstance(value, (int, float)) and not math.isfinite(value):
             raise ValueError(f"Invalid assumption: {name}")
     if not (0 <= a.tax_rate < 1 and 0 <= a.dividend_payout <= 1 and 0 < a.gross_margin <= 1):
         raise ValueError("Check tax, payout, and gross margin assumptions.")
