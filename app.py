@@ -780,6 +780,10 @@ with statements:
     cf_rows = ["net_income", "da", "delta_nwc", "cfo", "capex", "cfi", "funding", "repayment", "dividends", "cff", "cash_change", "cash", "fcff", "reinvestment", "invested_capital", "roic"]
     labels = BASE_FIELDS | {
         "ebitda": "EBITDA", "ebit": "EBIT", "nopat": "NOPAT (After-tax operating profit)", "assets": "Total assets",
+        "ap": "Trade payables (Operating liability)",
+        "other_cl": "Other operating current liabilities (Operating liability)",
+        "short_debt": "Short-term debt (Financial debt)",
+        "long_debt": "Long-term debt (Financial debt)",
         "liabilities": "Total liabilities", "balance_check": "Balance check",
         "delta_nwc": "Increase in operating working capital", "cfo": "Operating cash flow", "capex": "Capital expenditure (outflow)",
         "cfi": "Investing cash flow", "funding": "New borrowing / funding need", "repayment": "Debt repayment (outflow)",
@@ -790,6 +794,12 @@ with statements:
     for title, rows in [("Income statement", income_rows), ("Balance sheet", bs_rows), ("Cash flow & funding", cf_rows)]:
         st.markdown(f"### {title}")
         st.dataframe(f[rows].T.rename(index=labels).style.format("{:,.1f}"), width="stretch")
+        if title == "Balance sheet":
+            st.caption(
+                "💡 **Liabilities Decomposition**: Financial debt (Short-term & Long-term debt) is maintained under a constant rollover "
+                "assumption. The increase in Total Liabilities is driven entirely by spontaneous operating liabilities (Trade Payables "
+                "and Other Current Liabilities) scaling proportionately with revenue growth."
+            )
 
 with dcf_tab:
     st.subheader("What are the future cash flows worth?")
