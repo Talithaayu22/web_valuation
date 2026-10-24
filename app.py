@@ -379,8 +379,16 @@ with assumptions_tab:
     with st.form(key("assumptions")):
         fields = {}
 
-        def pct(label, field, lo=0., hi=100.):
-            fields[field] = st.number_input(label, min_value=float(lo), max_value=float(hi), value=float(getattr(initial, field) * 100), step=.5, key=key(field)) / 100
+        def pct(label, field, lo=0., hi=100., help=None):
+            fields[field] = st.number_input(
+                label,
+                min_value=float(lo),
+                max_value=float(hi),
+                value=float(getattr(initial, field) * 100),
+                step=.5,
+                key=key(field),
+                help=help
+            ) / 100
 
         col_op, col_macro, col_policy = st.columns(3)
 
@@ -392,11 +400,26 @@ with assumptions_tab:
             pct("Growth · year 5 (%)", "mature_growth", -50, 50)
             pct("EBIT margin · years 1–3 (%)", "ebit_margin", -50, 80)
             pct("EBIT margin · year 5 (%)", "mature_margin", -50, 80)
-            pct("Gross margin (%)", "gross_margin", 1, 100)
-            pct("Corporate tax rate (%)", "tax_rate", 0, 60)
-            pct("Capex / revenue (%)", "capex_pct", 0, 100)
-            pct("D&A / opening fixed assets (%)", "depreciation_rate", 0, 100)
-            pct("Non-cash working capital / revenue (%)", "nwc_pct", -50, 80)
+            pct(
+                "Gross margin (%)", "gross_margin", 1, 100,
+                help="Direct operating profitability after Cost of Goods Sold (COGS): (Revenue - COGS) / Revenue. In this model, cash OpEx is dynamically derived as the residual (Revenue - COGS - D&A - EBIT). Higher gross margin expands operating cushion."
+            )
+            pct(
+                "Corporate tax rate (%)", "tax_rate", 0, 60,
+                help="Inferred baseline is 22.0% (Indonesian statutory corporate rate under UU HPP No. 7/2021). The model includes Damodaran Net Operating Loss (NOL) carryforward protection."
+            )
+            pct(
+                "Capex / revenue (%)", "capex_pct", 0, 100,
+                help="Annual capital expenditure as a percentage of revenue: CapEx / Revenue. Inferred baseline uses the 4-year statistical median (2022–2025) to smooth out lumpy expansion projects and reflect ongoing maintenance and productive asset replacement."
+            )
+            pct(
+                "D&A / opening fixed assets (%)", "depreciation_rate", 0, 100,
+                help="Accounting amortization rate of net fixed assets: D&A / Opening Net PP&E. Governs how fast physical plant, machinery, and equipment depreciate on the balance sheet and are added back to operating cash flow in FCFF."
+            )
+            pct(
+                "Non-cash working capital / revenue (%)", "nwc_pct", -50, 80,
+                help="Damodaran Non-Cash Working Capital ratio: ((AR + Inventory + Other CA) - (AP + Other CL)) / Revenue. Measures operational liquidity tied up in the business. Negative NWC reflects a supplier-financed business model (e.g. retailers, telecom)."
+            )
             st.caption("Damodaran standard: working capital is driven by non-cash NWC % of revenue instead of turnover days.")
             pct("Minimum cash / revenue (%)", "minimum_cash_pct", 0, 100)
 
