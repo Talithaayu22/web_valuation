@@ -386,7 +386,7 @@ def get_or_fetch_peers(tickers, target_symbol=None):
     return results, errors
 
 
-def peer_record(company, period, fx, claims=None):
+def peer_record(company, period, fx=1.0, claims=None):
     h = company["historical"]
     if period not in h.columns:
         raise ValueError(f"No matching fiscal period {period}; excluded rather than mixing periods.")
@@ -400,19 +400,14 @@ def peer_record(company, period, fx, claims=None):
         raise ValueError("Cash or debt unavailable; cannot calculate a comparable EV.")
     market_cap = price * shares / BILLION
 
-    # Damodaran Week 4 Slide 8 & 23: Default EV claims include Minority Interest (NCI)
-    if claims is None:
-        nci = 0.0 if pd.isna(p.get("minority_interest")) else float(p["minority_interest"])
-        net_claim = nci * fx
-    else:
-        net_claim = claims
+    # Clean EV calculation strictly from reported financial statements (no manual adjustments)
+    nci = 0.0 if pd.isna(p.get("minority_interest")) else float(p["minority_interest"])
+    tot_debt = float(p.short_debt + p.long_debt)
+    book_eq = float(p["common_equity"]) if "common_equity" in p and pd.notna(p["common_equity"]) else float(p.equity)
+    inv_cap = float(p.short_debt + p.long_debt + p.equity - p.cash)
 
-    tot_debt = (float(p.short_debt + p.long_debt) * fx)
-    book_eq = (float(p["common_equity"]) * fx) if "common_equity" in p and pd.notna(p["common_equity"]) else (float(p.equity) * fx)
-    inv_cap = (float(p.short_debt + p.long_debt + p.equity - p.cash) * fx)
-
-    rev_val = float(p.revenue) * fx if pd.notna(p.get("revenue")) else None
-    ebitda_val = float(p.ebitda) * fx if pd.notna(p.get("ebitda")) else None
+    rev_val = float(p.revenue) if pd.notna(p.get("revenue")) else None
+    ebitda_val = float(p.ebitda) if pd.notna(p.get("ebitda")) else None
     margin = (ebitda_val / rev_val) if rev_val and ebitda_val and rev_val > 0 else None
     der = (tot_debt / book_eq) if book_eq and book_eq > 0 else None
 
@@ -424,12 +419,12 @@ def peer_record(company, period, fx, claims=None):
         sector=company.get("sector", "Unknown"),
         market_cap=market_cap,
         total_debt=tot_debt,
-        ev=market_cap + (p.short_debt + p.long_debt - p.cash) * fx + net_claim,
+        ev=market_cap + tot_debt - float(p.cash) + nci,
         book_equity=book_eq,
         invested_capital=inv_cap,
         ebitda_margin=margin,
         der=der,
-        **{k: None if pd.isna(p.get(k)) else float(p[k]) * fx for k in ("revenue", "ebitda", "ebit", "net_income")}
+        **{k: None if pd.isna(p.get(k)) else float(p[k]) for k in ("revenue", "ebitda", "ebit", "net_income")}
     )
 
 

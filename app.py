@@ -444,13 +444,8 @@ active_peers = st.session_state.get("peer_companies", [])
 if active_peers:
     for pc in active_peers:
         if st.session_state.get(key(f"include_{pc['symbol']}"), True):
-            pfx = float(pc.get("suggested_fx", 1.0))
-            if pc.get("financial_currency") != "IDR":
-                pfx = float(st.session_state.get(key(f"fx_{pc['symbol']}"), pfx))
-            claims = float(st.session_state.get(key(f"claims_{pc['symbol']}"), 0.0))
             try:
-                if pfx > 0:
-                    peer_rows.append(peer_record(pc, period, pfx, claims if claims != 0 else None))
+                peer_rows.append(peer_record(pc, period))
             except ValueError:
                 pass
 elif saved.get("peers"):
@@ -736,12 +731,8 @@ with peers_tab:
         # Compute peer records and rankings
         all_candidate_rows = []
         for pc in all_pcs:
-            pfx = float(pc.get("suggested_fx", 1.0))
-            if pc.get("financial_currency") != "IDR":
-                pfx = float(st.session_state.get(key(f"fx_{pc['symbol']}"), pfx))
-            claims = float(st.session_state.get(key(f"claims_{pc['symbol']}"), 0.0))
             try:
-                p_cand = peer_record(pc, period, pfx, claims if claims != 0 else None)
+                p_cand = peer_record(pc, period)
                 all_candidate_rows.append(p_cand)
             except Exception:
                 pass
@@ -789,15 +780,7 @@ with peers_tab:
 
         st.dataframe(pd.DataFrame(table_rows), hide_index=True, width="stretch")
 
-        with st.expander("Advanced Peer Adjustments (Currency FX & EV Claims)"):
-            for pc in all_pcs:
-                sym = pc["symbol"]
-                st.markdown(f"**{sym} · {pc['name']}**")
-                c_fx, c_cl = st.columns(2)
-                pfx = float(pc.get("suggested_fx", 1.0))
-                if pc.get("financial_currency") != "IDR":
-                    c_fx.number_input(f"FX Rate ({pc.get('financial_currency')}/IDR)", min_value=0.0, value=pfx, key=key(f"fx_{sym}"))
-                c_cl.number_input(f"Net EV Adjustment (IDR bn) for {sym}", value=float(st.session_state.get(key(f"claims_{sym}"), 0.0)), key=key(f"claims_{sym}"))
+
 
     else:
         st.info("No peers currently loaded. Click 'Reset Defaults' above to automatically load suggested peers.")
