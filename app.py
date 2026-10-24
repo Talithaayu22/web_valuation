@@ -751,7 +751,6 @@ with peers_tab:
             "EBITDA Margin": f"{target_profile['ebitda_margin']:.1%}",
             "DER (D/E)": f"{target_profile['der']:.2f}x",
             "Similarity Rank": "0.00 (Benchmark)",
-            "Why Selected?": "Target Valuation Anchor",
         })
 
         # Columns for checkboxes
@@ -762,7 +761,6 @@ with peers_tab:
                 is_inc = st.checkbox(f"Include {sym.replace('.JK', '')}", value=st.session_state.get(key(f"include_{sym}"), True), key=key(f"include_{sym}"))
 
             r_info = rank_map.get(sym, {})
-            why_text = explain_peer_selection(target_profile, r_info) if r_info else "Comparable candidate"
             m_val = r_info.get("ebitda_margin")
             der_val = r_info.get("der")
             dist_val = r_info.get("similarity_distance", 0.0)
@@ -775,7 +773,6 @@ with peers_tab:
                 "EBITDA Margin": f"{m_val:.1%}" if m_val is not None else "—",
                 "DER (D/E)": f"{der_val:.2f}x" if der_val is not None else "—",
                 "Similarity Rank": f"Rank #{idx+1} (Dist: {dist_val:.2f})",
-                "Why Selected?": why_text,
             })
 
         st.dataframe(pd.DataFrame(table_rows), hide_index=True, width="stretch")
