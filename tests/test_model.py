@@ -254,7 +254,7 @@ def test_peer_similarity_ranking_by_ebitda_margin_and_der():
     candidates = [
         dict(ticker='FAR', industry='Telecom', ebitda_margin=0.40, der=1.20),
         dict(ticker='CLOSE', industry='Thermal Coal', ebitda_margin=0.22, der=0.48),
-        dict(ticker='MEDIUM', industry='Thermal Coal', ebitda_margin=0.15, der=0.80),
+        dict(ticker='MEDIUM', industry='Thermal Coal', ebitda_margin=0.15, der=1.10),
     ]
     ranked = rank_peers_similarity(target, candidates)
     assert ranked[0]['ticker'] == 'CLOSE'
@@ -512,7 +512,7 @@ def test_similarity_score_and_confidence_level():
     p2 = {"ticker": "CLOS.JK", "industry": "Thermal Coal", "ebitda_margin": 0.22, "der": 0.60}
 
     # Peer 3: Moderate match (dist = 1.20) -> ~56/100, Moderate Confidence
-    p3 = {"ticker": "MODR.JK", "industry": "Thermal Coal", "ebitda_margin": 0.26, "der": 0.80}
+    p3 = {"ticker": "MODR.JK", "industry": "Thermal Coal", "ebitda_margin": 0.32, "der": 1.10}
 
     # Peer 4: Distant / different industry match (dist >= 5.0) -> < 50/100, Low Confidence
     p4 = {"ticker": "DIST.JK", "industry": "Consumer Goods", "ebitda_margin": 0.10, "der": 1.50}
@@ -808,3 +808,38 @@ def test_clean_company_name():
     # 4. Handles empty and whitespace edge cases
     assert clean_company_name("") == ""
     assert clean_company_name(None) == ""
+
+
+def test_tapg_peer_ranking_lsip_rank_1_and_aali_demoted():
+    from valuation.data import rank_peers_similarity
+
+    target_tapg = {
+        "ticker": "TAPG.JK",
+        "name": "Triputra Agro Persada",
+        "industry": "Farm Products",
+        "ebitda_margin": 0.3231,
+        "der": 0.0981
+    }
+    candidates = [
+        {"ticker": "AALI.JK", "name": "Astra Agro Lestari", "industry": "Farm Products", "ebitda_margin": 0.0970, "der": 0.0000},
+        {"ticker": "LSIP.JK", "name": "PP London Sumatra", "industry": "Farm Products", "ebitda_margin": 0.4130, "der": 0.0000},
+        {"ticker": "DSNG.JK", "name": "Dharma Satya Nusantara", "industry": "Farm Products", "ebitda_margin": 0.2360, "der": 0.3600},
+        {"ticker": "SIMP.JK", "name": "Salim Ivomas Pratama", "industry": "Farm Products", "ebitda_margin": 0.1950, "der": 0.4600},
+    ]
+
+    ranked = rank_peers_similarity(target_tapg, candidates)
+
+    # 1. LSIP is Rank #1 with High Confidence (>= 75 score)
+    assert ranked[0]["ticker"] == "LSIP.JK"
+    assert ranked[0]["confidence_level"] == "High"
+    assert ranked[0]["similarity_score"] >= 75
+
+    # 2. DSNG is Rank #2 with Moderate Confidence
+    assert ranked[1]["ticker"] == "DSNG.JK"
+    assert ranked[1]["confidence_level"] == "Moderate"
+
+    # 3. SIMP is Rank #3 with Moderate Confidence
+    assert ranked[2]["ticker"] == "SIMP.JK"
+
+    # 4. AALI is demoted to Rank #4 due to low 9.7% margin vs 32.3% target
+    assert ranked[3]["ticker"] == "AALI.JK"

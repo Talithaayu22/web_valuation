@@ -1359,9 +1359,15 @@ with peers_tab:
             "Similarity & Confidence": "100/100 (Benchmark)",
         })
 
+        # Sort peers by similarity distance (descending similarity score)
+        sorted_pcs = sorted(
+            all_pcs,
+            key=lambda p: rank_map.get(p["symbol"], {}).get("similarity_distance", 999.0)
+        )
+
         # Columns for checkboxes & removal
-        cols_cb = st.columns(min(4, max(1, len(all_pcs))))
-        for idx, pc in enumerate(all_pcs):
+        cols_cb = st.columns(min(4, max(1, len(sorted_pcs))))
+        for idx, pc in enumerate(sorted_pcs):
             sym = pc["symbol"]
             clean_sym = sym.replace('.JK', '')
             with cols_cb[idx % len(cols_cb)]:

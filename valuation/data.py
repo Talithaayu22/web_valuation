@@ -450,9 +450,9 @@ def peer_record(company, period, fx=None, claims=None):
 
 def rank_peers_similarity(target_profile, candidate_records):
     """Ranks candidate peer records based on similarity to target:
-    1. Same sub-industry match prioritised.
-    2. Financial similarity: Euclidean distance on normalized EBITDA Margin and DER (Debt-to-Equity).
-    Returns candidates sorted by ascending similarity distance.
+    1. Financial comparability: Weighted distance on normalized EBITDA Margin (60%) and DER (40%).
+    2. Sub-industry match prioritised (+3.0 penalty for different sub-industries).
+    Returns candidates sorted by ascending similarity distance (descending similarity score).
     """
     target_margin = target_profile.get("ebitda_margin")
     target_der = target_profile.get("der")
@@ -464,14 +464,15 @@ def rank_peers_similarity(target_profile, candidate_records):
         rec_der = rec.get("der")
         rec_ind = (rec.get("industry") or "").strip().lower()
 
-        # Distance components with typical standard deviations as normalizers (margin ~10%, DER ~50%)
-        m_diff = abs((rec_margin - target_margin) / 0.10) if (rec_margin is not None and target_margin is not None) else 2.0
-        d_diff = abs((rec_der - target_der) / 0.50) if (rec_der is not None and target_der is not None) else 2.0
-        dist = m_diff + d_diff
+        # Calibrated 60% EBITDA Margin / 40% DER distance
+        # Normalizers: margin std ~15%, DER std ~60%
+        m_diff = abs((rec_margin - target_margin) / 0.15) if (rec_margin is not None and target_margin is not None) else 2.0
+        d_diff = abs((rec_der - target_der) / 0.60) if (rec_der is not None and target_der is not None) else 2.0
+        dist = 0.60 * m_diff + 0.40 * d_diff
 
         # Penalty if different industry
         if target_ind and rec_ind and target_ind != rec_ind:
-            dist += 5.0
+            dist += 3.0
 
         r = dict(rec)
         r["similarity_distance"] = round(dist, 4)
