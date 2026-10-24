@@ -701,17 +701,20 @@ with peers_tab:
             st.markdown("**Implied price per share from peer multiples**")
             st.dataframe(tab_relative, hide_index=True, width="stretch", column_config={"Peer multiple": st.column_config.NumberColumn(format="%.2fx"), "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")})
             
-            med = tab_relative[tab_relative.Case == "Median"]
-            chart(go.Figure(go.Bar(x=med.Multiple, y=med["Implied price (IDR)"], marker_color="#087f69")), "IDR / share")
+            c_case, _ = st.columns([1, 2])
+            selected_agg = c_case.selectbox("Multiple aggregator for composite & chart:", ["Median", "Harmonic mean"], index=0, key=key("rel_agg_choice"))
             
-            tab_rel_price = composite_relative_value(tab_relative)
+            bench_df = tab_relative[tab_relative.Case == selected_agg]
+            chart(go.Figure(go.Bar(x=bench_df.Multiple, y=bench_df["Implied price (IDR)"], marker_color="#087f69")), f"IDR / share ({selected_agg})")
+            
+            tab_rel_price = composite_relative_value(tab_relative, case=selected_agg)
             if len(tab_peer_rows) >= 2 and pd.notna(tab_rel_price):
                 c_dcf, c_rel = st.columns(2)
                 c_dcf.metric(f"DCF Fair Value ({a.dcf_weight:.0%} weight)", f"Rp {result['price']:,.0f}" if result else "—")
                 c_rel.metric(f"Composite Relative Value ({a.relative_weight:.0%} weight)", f"Rp {tab_rel_price:,.0f}")
                 tab_blended = blended_valuation(result["price"] if result else None, tab_rel_price, a.dcf_weight, a.relative_weight)
                 st.metric("Blended Fair Value / Share", f"Rp {tab_blended:,.0f}")
-                st.caption(f"Composite multiple is the unweighted average of valid peer median multiples (EV/EBITDA, P/E, P/BV).")
+                st.caption(f"Composite multiple is the unweighted average of valid peer {selected_agg.lower()} multiples (EV/EBITDA, P/E, P/BV). Harmonic mean (Damodaran & Bhojraj-Lee) eliminates upward skew caused by outliers with near-zero denominators.")
     else:
         st.info("Click 'Fetch peer financials' above to load industry-matched peers and calculate relative multiples.")
         st.info("Choose comparable IDX businesses to calculate EV/Revenue, EV/EBITDA, EV/EBIT, P/E, and P/BV ranges. Peer data is fetched only when requested.")

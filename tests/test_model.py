@@ -355,3 +355,25 @@ def test_sustainable_growth_and_capex_normalization(case):
     # Positive growth is 100% preserved
     expected_cagr = (15000.0 / 10000.0) ** (1.0 / 3.0) - 1.0
     assert inferred_growing.growth == pytest.approx(expected_cagr)
+
+
+def test_relative_values_includes_harmonic_mean():
+    import math
+    peers = [
+        dict(ev=100, market_cap=50, revenue=100, ebitda=20, ebit=15, net_income=10, book_equity=25),
+        dict(ev=200, market_cap=100, revenue=200, ebitda=40, ebit=30, net_income=10, book_equity=50),
+        dict(ev=400, market_cap=200, revenue=400, ebitda=80, ebit=60, net_income=10, book_equity=100),
+    ]
+    target = dict(revenue=100, ebitda=20, ebit=15, net_income=10, book_equity=50)
+    df = relative_values(peers, target, cash=10, debt=20, shares=10)
+    
+    assert set(df["Case"].unique()) == {"Lower quartile", "Median", "Harmonic mean", "Upper quartile"}
+    
+    pe_hm = df[(df["Case"] == "Harmonic mean") & (df["Multiple"] == "P / E")].iloc[0]
+    expected_pe = 3.0 / (1.0/5.0 + 1.0/10.0 + 1.0/20.0) # 3 / 0.35 = 8.57142857
+    assert pe_hm["Peer multiple"] == pytest.approx(expected_pe)
+    assert pe_hm["Implied price (IDR)"] == pytest.approx(expected_pe)
+    
+    comp_hm = composite_relative_value(df, case="Harmonic mean")
+    assert math.isfinite(comp_hm)
+    assert comp_hm > 0

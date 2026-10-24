@@ -386,8 +386,13 @@ def relative_values(peers, target, cash, debt, shares, other_claims=0, nonoperat
             den, num = p.get(metric), p.get(numerator)
             if den is not None and num is not None and math.isfinite(den) and math.isfinite(num) and den > 0 and num > 0:
                 multiples.append(num / den)
-        for percentile, name in [(25, "Lower quartile"), (50, "Median"), (75, "Upper quartile")]:
-            mult = float(np.percentile(multiples, percentile)) if multiples else float("nan")
+        cases = [
+            ("Lower quartile", float(np.percentile(multiples, 25)) if multiples else float("nan")),
+            ("Median", float(np.percentile(multiples, 50)) if multiples else float("nan")),
+            ("Harmonic mean", float(len(multiples) / np.sum([1.0 / m for m in multiples])) if multiples and all(m > 0 for m in multiples) else float("nan")),
+            ("Upper quartile", float(np.percentile(multiples, 75)) if multiples else float("nan")),
+        ]
+        for name, mult in cases:
             denominator = target.get(metric)
             value = mult * denominator if denominator is not None and denominator > 0 else float("nan")
             equity = value + cash + nonoperating_assets - debt - other_claims if numerator == "ev" else value
@@ -395,16 +400,16 @@ def relative_values(peers, target, cash, debt, shares, other_claims=0, nonoperat
     return pd.DataFrame(rows)
 
 
-def composite_relative_value(relative_df, metrics=("EV / EBITDA", "P / E", "P / BV")):
-    """Calculates the composite average implied price from median peer multiples.
+def composite_relative_value(relative_df, metrics=("EV / EBITDA", "P / E", "P / BV"), case="Median"):
+    """Calculates the composite average implied price from peer multiples (defaults to Median, supports Harmonic mean).
     Requires at least one valid multiple from the specified metrics.
     """
     if relative_df is None or relative_df.empty:
         return float("nan")
-    median_rows = relative_df[relative_df["Case"] == "Median"]
+    case_rows = relative_df[relative_df["Case"] == case]
     valid_prices = []
     for m in metrics:
-        subset = median_rows[median_rows["Multiple"] == m]
+        subset = case_rows[case_rows["Multiple"] == m]
         if not subset.empty:
             price = subset.iloc[0]["Implied price (IDR)"]
             if pd.notna(price) and math.isfinite(price) and price > 0:
