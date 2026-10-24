@@ -512,9 +512,8 @@ with assumptions_tab:
 
         # Scenario Probabilities
         st.markdown("##### Scenario Probability Weighting")
-        st.caption("Institutional rule ranges: Base Case (50%–60%), Bull Case (20%–25%), Bear Case (20%–25%). Total allocation must equal 100.0%.")
 
-        p_col1, p_col2, p_col3, p_col4 = st.columns([1, 1, 1, 1])
+        p_col1, p_col2, p_col3 = st.columns(3)
         with p_col1:
             p_bear_def = float(saved.get("prob_bear", getattr(initial, "prob_bear", 0.25)) * 100)
             p_bear_val = st.number_input(
@@ -546,9 +545,6 @@ with assumptions_tab:
             fields["prob_bull"] = p_bull_val / 100.0
 
         total_prob = p_bear_val + p_base_val + p_bull_val
-        with p_col4:
-            st.metric("Total Probability", f"{total_prob:.1f}%")
-
         if not math.isclose(total_prob, 100.0, abs_tol=0.01):
             st.warning(f"Total probability is {total_prob:.1f}%. It must sum to exactly 100.0% for accurate expected value weighting.")
 
