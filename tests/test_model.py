@@ -515,7 +515,7 @@ def test_similarity_score_and_confidence_level():
     p3 = {"ticker": "MODR.JK", "industry": "Thermal Coal", "ebitda_margin": 0.32, "der": 1.10}
 
     # Peer 4: Distant / different industry match (dist >= 5.0) -> < 50/100, Low Confidence
-    p4 = {"ticker": "DIST.JK", "industry": "Consumer Goods", "ebitda_margin": 0.10, "der": 1.50}
+    p4 = {"ticker": "DIST.JK", "industry": "Consumer Goods", "ebitda_margin": 0.00, "der": 3.00}
 
     ranked = rank_peers_similarity(target, [p1, p2, p3, p4])
     assert len(ranked) == 4
@@ -843,3 +843,37 @@ def test_tapg_peer_ranking_lsip_rank_1_and_aali_demoted():
 
     # 4. AALI is demoted to Rank #4 due to low 9.7% margin vs 32.3% target
     assert ranked[3]["ticker"] == "AALI.JK"
+
+
+def test_unvr_kino_pure_financial_similarity_no_penalty():
+    from valuation.data import rank_peers_similarity
+
+    target_unvr = {
+        "ticker": "UNVR.JK",
+        "name": "Unilever Indonesia",
+        "industry": "Household & Personal Products",
+        "ebitda_margin": 0.152,
+        "der": 0.14
+    }
+    candidates = [
+        {"ticker": "VICI.JK", "name": "Victoria Care", "industry": "Personal Care Products", "ebitda_margin": 0.152, "der": 0.08},
+        {"ticker": "MYOR.JK", "name": "Mayora Indah", "industry": "Packaged Foods", "ebitda_margin": 0.138, "der": 0.45},
+        {"ticker": "TCID.JK", "name": "Mandom Indonesia", "industry": "Household & Personal Products", "ebitda_margin": 0.004, "der": 0.00},
+        {"ticker": "KINO.JK", "name": "Kino Indonesia", "industry": "Beverages - Non-Alcoholic", "ebitda_margin": 0.077, "der": 0.90},
+    ]
+
+    ranked = rank_peers_similarity(target_unvr, candidates)
+
+    # 1. VICI is top peer with near-perfect score >= 90
+    assert ranked[0]["ticker"] == "VICI.JK"
+    assert ranked[0]["similarity_score"] >= 90
+    assert ranked[0]["confidence_level"] == "High"
+
+    # 2. MYOR has high confidence >= 80
+    assert ranked[1]["ticker"] == "MYOR.JK"
+    assert ranked[1]["similarity_score"] >= 80
+
+    # 3. KINO is NOT penalized to 28; it has score >= 60 and Moderate Confidence
+    kino_res = [r for r in ranked if r["ticker"] == "KINO.JK"][0]
+    assert kino_res["similarity_score"] >= 60
+    assert kino_res["confidence_level"] == "Moderate"

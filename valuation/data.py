@@ -330,23 +330,34 @@ def demo_peers():
 
 
 IDX_INDUSTRY_PEERS = {
-    # Thermal Coal / Mining
-    "Thermal Coal": ["ADRO", "PTBA", "ITMG", "BUMI", "INDY", "HRUM"],
+    # Thermal Coal / Mining (IDX-IC: Coal Production)
+    "Coal Production": ["ADRO", "PTBA", "ITMG", "BUMI", "INDY", "HRUM", "ADMR"],
+    "Thermal Coal": ["ADRO", "PTBA", "ITMG", "BUMI", "INDY", "HRUM", "ADMR"],
     # Oil & Gas
+    "Oil & Gas Storage & Distribution": ["AKRA", "PGAS", "MEDC", "ENRG"],
+    "Oil & Gas Production & Refinery": ["MEDC", "PGAS", "ENRG", "AKRA"],
     "Oil & Gas Refining & Marketing": ["AKRA", "PGAS", "MEDC"],
     "Oil & Gas E&P": ["MEDC", "PGAS", "ENRG"],
-    # Consumer Staples / Food & Beverage
+    # Consumer Non-Cyclicals / Personal Care (IDX-IC: Personal Care Products)
+    "Personal Care Products": ["UNVR", "VICI", "TCID", "KINO", "MYOR", "ICBP"],
+    "Household & Personal Products": ["UNVR", "VICI", "TCID", "KINO", "MYOR", "ICBP"],
+    # Processed Foods / Packaged Foods
+    "Processed Foods": ["ICBP", "INDF", "MYOR", "UNVR", "ROTI", "ULTJ"],
     "Packaged Foods": ["ICBP", "INDF", "MYOR", "UNVR", "ROTI", "ULTJ"],
-    "Household & Personal Products": ["UNVR", "KINO", "TCID"],
+    # Pharmaceuticals
+    "Pharmaceuticals": ["KLBF", "SIDO", "TSPC", "KAEF"],
     "Drug Manufacturers - General": ["KLBF", "SIDO", "TSPC", "KAEF"],
-    # Cement & Building
+    # Cement & Building Materials
     "Building Materials": ["SMGR", "INTP", "SMBR"],
-    # Industrial Conglomerates / Heavy Equipment
+    # Industrial Conglomerates
     "Industrial Conglomerates": ["ASII", "UNTR"],
-    # Agriculture / Plantation
-    "Farm Products": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP"],
+    # Agriculture / Plantation (IDX-IC: Plantations & Crops)
+    "Plantations & Crops": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP", "BWPT", "SSMS"],
+    "Farm Products": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP", "BWPT", "SSMS"],
     "Agricultural Inputs": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP"],
-    # Telecom
+    # Telecom Services
+    "Integrated Telecommunication Service": ["TLKM", "ISAT", "EXCL"],
+    "Wireless Telecommunication Services": ["TLKM", "ISAT", "EXCL"],
     "Telecom Services": ["TLKM", "ISAT", "EXCL"],
 }
 
@@ -449,30 +460,26 @@ def peer_record(company, period, fx=None, claims=None):
 
 
 def rank_peers_similarity(target_profile, candidate_records):
-    """Ranks candidate peer records based on similarity to target:
-    1. Financial comparability: Weighted distance on normalized EBITDA Margin (60%) and DER (40%).
-    2. Sub-industry match prioritised (+3.0 penalty for different sub-industries).
+    """Ranks candidate peer records based purely on financial similarity to target:
+    - 60% Weight: Normalized EBITDA Margin distance (operational profitability)
+    - 40% Weight: Normalized Debt-to-Equity DER distance (capital structure risk)
+    Sub-industry matching is enforced as the first-stage gating filter,
+    so no penalty is added to the financial distance.
     Returns candidates sorted by ascending similarity distance (descending similarity score).
     """
     target_margin = target_profile.get("ebitda_margin")
     target_der = target_profile.get("der")
-    target_ind = (target_profile.get("industry") or "").strip().lower()
 
     ranked = []
     for rec in candidate_records:
         rec_margin = rec.get("ebitda_margin")
         rec_der = rec.get("der")
-        rec_ind = (rec.get("industry") or "").strip().lower()
 
-        # Calibrated 60% EBITDA Margin / 40% DER distance
+        # Pure financial distance on normalized EBITDA Margin and DER
         # Normalizers: margin std ~15%, DER std ~60%
         m_diff = abs((rec_margin - target_margin) / 0.15) if (rec_margin is not None and target_margin is not None) else 2.0
         d_diff = abs((rec_der - target_der) / 0.60) if (rec_der is not None and target_der is not None) else 2.0
         dist = 0.60 * m_diff + 0.40 * d_diff
-
-        # Penalty if different industry
-        if target_ind and rec_ind and target_ind != rec_ind:
-            dist += 3.0
 
         r = dict(rec)
         r["similarity_distance"] = round(dist, 4)

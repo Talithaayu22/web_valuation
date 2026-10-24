@@ -1392,7 +1392,7 @@ with peers_tab:
                 "Company Name": clean_company_name(pc["name"]),
                 "EBITDA Margin": f"{m_val:.1%}" if m_val is not None else "—",
                 "DER (D/E)": f"{der_val:.2f}x" if der_val is not None else "—",
-                "Similarity & Confidence": f"Rank #{idx+1} · {score_val}/100 ({conf_val} Confidence)",
+                "Similarity & Confidence": f"{score_val}/100 ({conf_val} Confidence)",
             })
 
         st.dataframe(pd.DataFrame(table_rows), hide_index=True, width="stretch")
