@@ -3,6 +3,7 @@ Aligned with Aswath Damodaran's DCF and Relative Valuation data standards.
 """
 from datetime import datetime, timezone
 from pathlib import Path
+import functools
 import math
 import re
 import pandas as pd
@@ -36,10 +37,67 @@ except ImportError:
 __all__ = [
     "CATALOG", "BILLION", "demo_company", "demo_peers", "fetch_company", 
     "peer_record", "ticker_symbol", "get_default_peers_for_ticker", 
-    "get_or_fetch_peers", "rank_peers_similarity", "get_doh_session", "normalize"
+    "get_or_fetch_peers", "rank_peers_similarity", "get_doh_session", "normalize",
+    "load_idx_company_registry", "get_company_idx_metadata",
 ]
 
 BILLION = 1e9
+
+
+@functools.lru_cache(maxsize=1)
+def load_idx_company_registry():
+    """Loads and caches official IDX listed company metadata from the repository Excel file:
+    'book/Company LIsted on IDX.xlsx'.
+    Only Sector, Sub-Industry, and official Stock Name are sourced here.
+    Financial data continues to be retrieved from yfinance.
+    """
+    excel_path = Path(__file__).resolve().parent.parent / "book" / "Company LIsted on IDX.xlsx"
+    if not excel_path.exists():
+        return {}, {}, {}
+    try:
+        df = pd.read_excel(excel_path, header=3)
+        df = df.dropna(subset=["Code"])
+        df["Code"] = df["Code"].astype(str).str.strip().str.upper()
+        df["Sector"] = df["Sector"].astype(str).str.strip()
+        df["Sub Industry"] = df["Sub Industry"].astype(str).str.strip()
+        df["Stock Name"] = df["Stock Name"].astype(str).str.strip()
+
+        ticker_map = {}
+        sub_ind_map = {}
+        sector_map = {}
+
+        for _, row in df.iterrows():
+            code = row["Code"]
+            sec = row["Sector"]
+            sub = row["Sub Industry"]
+            name = row["Stock Name"]
+
+            ticker_map[code] = {
+                "code": code,
+                "name": name,
+                "sector": sec,
+                "sub_industry": sub,
+            }
+            if sub not in sub_ind_map:
+                sub_ind_map[sub] = []
+            sub_ind_map[sub].append(code)
+
+            if sec not in sector_map:
+                sector_map[sec] = []
+            sector_map[sec].append(code)
+
+        return ticker_map, sub_ind_map, sector_map
+    except Exception:
+        return {}, {}, {}
+
+
+def get_company_idx_metadata(symbol):
+    """Retrieves official IDX listed company metadata for a ticker from the Excel registry."""
+    clean = symbol.replace(".JK", "").strip().upper()
+    ticker_map, _, _ = load_idx_company_registry()
+    return ticker_map.get(clean)
+
+
 CATALOG = {
     "TLKM": "Telkom Indonesia", "ASII": "Astra International", "ICBP": "Indofood CBP",
     "INDF": "Indofood Sukses Makmur", "UNVR": "Unilever Indonesia", "KLBF": "Kalbe Farma",
@@ -255,11 +313,18 @@ def fetch_company(symbol):
         except Exception:
             suggested_fx = 16000.0 if fin_curr == "USD" else 1.0
 
+    # Sector, Sub-Industry, and official Stock Name are strictly sourced from repository IDX Excel
+    clean_sym = symbol.replace(".JK", "").strip().upper()
+    idx_meta = get_company_idx_metadata(clean_sym)
+    official_name = idx_meta["name"] if idx_meta else clean_company_name(info.get("longName", symbol))
+    official_sector = idx_meta["sector"] if idx_meta else info.get("sector", "Unknown")
+    official_industry = idx_meta["sub_industry"] if idx_meta else info.get("industry", "Unknown")
+
     return dict(
         symbol=symbol,
-        name=clean_company_name(info.get("longName", symbol)),
-        sector=info.get("sector", "Unknown"),
-        industry=info.get("industry", "Unknown"),
+        name=official_name,
+        sector=official_sector,
+        industry=official_industry,
         financial_currency=fin_curr,
         price_currency=price_curr,
         suggested_fx=suggested_fx,
@@ -363,21 +428,41 @@ IDX_INDUSTRY_PEERS = {
 
 
 def get_default_peers_for_ticker(symbol, industry=None):
-    """Returns candidate peer tickers for a given symbol based on industry mapping."""
+    """Returns candidate peer tickers for a given symbol based on official IDX sub-industry mapping.
+    Industry/Sub-industry is sourced strictly from 'book/Company LIsted on IDX.xlsx'.
+    """
     clean = symbol.replace(".JK", "").upper()
+    ticker_map, sub_ind_map, sector_map = load_idx_company_registry()
+
     candidates = []
-    # Check by industry if provided
-    if industry and industry in IDX_INDUSTRY_PEERS:
-        candidates = [t for t in IDX_INDUSTRY_PEERS[industry] if t != clean]
-    # Check by ticker in predefined clusters
+    # 1. Official IDX Sub-Industry matching (strictly from repository IDX Excel)
+    if clean in ticker_map:
+        sub_ind = ticker_map[clean]["sub_industry"]
+        all_in_sub = [t for t in sub_ind_map.get(sub_ind, []) if t != clean]
+        if all_in_sub:
+            # Prioritize prominent curated benchmark peers within the same official sub-industry
+            curated = [t for t in IDX_INDUSTRY_PEERS.get(sub_ind, []) if t in all_in_sub]
+            rest = [t for t in all_in_sub if t not in curated]
+            candidates = curated + rest
+        else:
+            # Fallback to broader official Sector if sub-industry has no other peers
+            sec = ticker_map[clean]["sector"]
+            candidates = [t for t in sector_map.get(sec, []) if t != clean]
+
+    # 2. Check by provided industry or ticker in predefined clusters if not in registry
     if not candidates:
-        for group in IDX_INDUSTRY_PEERS.values():
-            if clean in group:
-                candidates = [t for t in group if t != clean]
-                break
-    # Default fallbacks within energy / general if none matched
+        if industry and industry in IDX_INDUSTRY_PEERS:
+            candidates = [t for t in IDX_INDUSTRY_PEERS[industry] if t != clean]
+        else:
+            for group in IDX_INDUSTRY_PEERS.values():
+                if clean in group:
+                    candidates = [t for t in group if t != clean]
+                    break
+
+    # 3. Default fallbacks within energy / general if none matched
     if not candidates:
         candidates = [t for t in ["ADRO", "PTBA", "ITMG", "AKRA", "PGAS"] if t != clean]
+
     return candidates
 
 

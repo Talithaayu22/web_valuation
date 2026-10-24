@@ -986,4 +986,38 @@ def test_damodaran_cyclical_commodity_growth_normalization():
     assert a_non_cyclical.growth < 0.01
 
 
+def test_official_idx_excel_registry_and_peer_matching():
+    from valuation.data import load_idx_company_registry, get_company_idx_metadata, get_default_peers_for_ticker
+
+    ticker_map, sub_ind_map, sector_map = load_idx_company_registry()
+    assert len(ticker_map) >= 900
+    assert "SIDO" in ticker_map
+    assert "UNVR" in ticker_map
+    assert "KLBF" in ticker_map
+
+    # SIDO metadata is Healthcare / Pharmaceuticals
+    sido_meta = get_company_idx_metadata("SIDO")
+    assert sido_meta is not None
+    assert sido_meta["sector"] == "Healthcare"
+    assert sido_meta["sub_industry"] == "Pharmaceuticals"
+
+    # UNVR metadata is Consumer Non-Cyclicals / Personal Care Products
+    unvr_meta = get_company_idx_metadata("UNVR")
+    assert unvr_meta is not None
+    assert unvr_meta["sector"] == "Consumer Non-Cyclicals"
+    assert unvr_meta["sub_industry"] == "Personal Care Products"
+
+    # Peer suggestions for SIDO must prioritize true pharma peers (KLBF, TSPC, etc.) and exclude UNVR
+    sido_peers = get_default_peers_for_ticker("SIDO.JK")
+    assert "KLBF" in sido_peers
+    assert "TSPC" in sido_peers
+    assert "UNVR" not in sido_peers
+    assert "ICBP" not in sido_peers
+
+    # Peer suggestions for UNVR must be personal care peers and exclude food/pharma
+    unvr_peers = get_default_peers_for_ticker("UNVR.JK")
+    assert "SIDO" not in unvr_peers
+
+
+
 
