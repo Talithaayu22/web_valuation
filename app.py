@@ -437,9 +437,24 @@ with assumptions_tab:
         with col_op:
             st.markdown("#### 01 · Operating model")
             st.caption("Revenue growth, operating margins, reinvestment, and capital intensity.")
+            # Calculate raw historical revenue CAGR for dynamic tooltip disclosure
+            cagr_hist = None
+            if historical is not None and not historical.empty and "revenue" in historical.index:
+                s_rev = historical.loc["revenue"].dropna()
+                if len(s_rev) >= 4 and s_rev.iloc[-4] > 0 and s_rev.iloc[-1] > 0:
+                    cagr_hist = (float(s_rev.iloc[-1]) / float(s_rev.iloc[-4])) ** (1.0 / 3.0) - 1.0
+                elif len(s_rev) >= 2 and s_rev.iloc[-2] > 0 and s_rev.iloc[-1] > 0:
+                    cagr_hist = (float(s_rev.iloc[-1]) / float(s_rev.iloc[-2])) - 1.0
+
+            is_normalized = (abs(initial.growth - 0.035) < 0.0001 and cagr_hist is not None and (cagr_hist < 0.02 or abs(cagr_hist - 0.035) > 0.005))
+            if is_normalized:
+                growth_help = f"Normalized to 3.5% via Damodaran cyclical commodity framework (trailing audited 3-year CAGR was {cagr_hist:.1%}). In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
+            else:
+                growth_help = f"Anchored to audited 3-year historical revenue CAGR ({initial.growth:.1%}). In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
+
             pct(
                 "Growth · years 1–3 (%)", "growth", -50, 100,
-                help=f"Anchored to audited 3-year historical revenue CAGR ({initial.growth:.1%}). In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth."
+                help=growth_help
             )
             pct(
                 "Growth · year 5 (%)", "mature_growth", -50, 50,

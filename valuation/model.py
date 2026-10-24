@@ -246,7 +246,7 @@ def infer_assumptions(historical, b, company=None):
             ind = (company.get("industry") or "") if company else ""
             is_cyclical = (
                 sec in ("Energy", "Basic Materials") or 
-                any(x in ind.lower() for x in ("coal", "mining", "metal", "oil", "gas", "farm products", "agriculture"))
+                any(x in ind.lower() for x in ("coal", "mining", "metal", "oil", "gas", "farm products", "agriculture", "plantation", "crop", "cooper"))
             )
 
             if len(s) >= 4 and s.iloc[-4] > 0 and s.iloc[-1] > 0:
