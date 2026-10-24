@@ -1,24 +1,44 @@
 from dataclasses import asdict, replace
 from html import escape
+import importlib
 import json
 import math
+import re
+import sys
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
+# Explicitly reload valuation submodules to prevent stale sys.modules caching in Streamlit
+for _mod_name in ("valuation.model", "valuation.data", "valuation.report_pdf", "valuation.export", "valuation.storage"):
+    if _mod_name in sys.modules:
+        try:
+            importlib.reload(sys.modules[_mod_name])
+        except Exception:
+            pass
+
+try:
+    from valuation.data import clean_company_name
+except ImportError:
+    def clean_company_name(name: str) -> str:
+        if not name:
+            return ""
+        cleaned = re.sub(r"^\s*perusahaan\s+perseroan\s*\(persero\)\s*", "", str(name), flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bperusahaan\s+perseroan\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\(persero\)", "", cleaned, flags=re.IGNORECASE)
+        return re.sub(r"\s+", " ", cleaned).strip()
+
 try:
     from valuation.data import (
         CATALOG, BILLION, demo_company, demo_peers, fetch_company, peer_record, ticker_symbol,
-        get_default_peers_for_ticker, get_or_fetch_peers, rank_peers_similarity, clean_company_name
+        get_default_peers_for_ticker, get_or_fetch_peers, rank_peers_similarity
     )
-    from valuation.report_pdf import generate_valuation_pdf
 except ImportError:
     from valuation.data import (
         CATALOG, BILLION, demo_company, fetch_company, peer_record, ticker_symbol,
-        get_default_peers_for_ticker, rank_peers_similarity, clean_company_name
+        get_default_peers_for_ticker, rank_peers_similarity
     )
-    from valuation.report_pdf import generate_valuation_pdf
     def demo_peers():
         p1 = demo_company()
         p1["symbol"] = "DEMO1.JK"
@@ -44,11 +64,12 @@ except ImportError:
             except Exception as e:
                 errors.append(f"{t}: {e}")
         return results, errors
-import importlib
-import sys
-if "valuation.model" in sys.modules:
-    import valuation.model
-    importlib.reload(valuation.model)
+
+try:
+    from valuation.report_pdf import generate_valuation_pdf
+except ImportError:
+    generate_valuation_pdf = None
+
 from valuation.model import (
     Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
     relative_values, infer_assumptions, compute_historical_roic, composite_relative_value, blended_valuation,
@@ -1039,30 +1060,33 @@ with overview:
         )
     with c_pdf2:
         try:
-            pdf_report_bytes = generate_valuation_pdf(
-                company=c,
-                assumptions=a,
-                dcf_result=result,
-                scenario_rows=scenario_rows,
-                relative_df=relative,
-                rel_breakdown=rel_breakdown,
-                rel_price=rel_price,
-                blended_price=blended_price,
-                effective_price=effective_price,
-                expected_dcf_price=expected_dcf_price,
-                rec=rec,
-                approach_eval=approach_eval,
-                peer_rows=peer_rows,
-            )
-            st.download_button(
-                label="📥 Download Valuation Report (PDF)",
-                data=pdf_report_bytes,
-                file_name=f"{c['symbol'].replace('.JK', '')}_Valuation_Report.pdf",
-                mime="application/pdf",
-                key=key("dl_pdf_overview"),
-                type="primary",
-                use_container_width=True
-            )
+            if generate_valuation_pdf is not None:
+                pdf_report_bytes = generate_valuation_pdf(
+                    company=c,
+                    assumptions=a,
+                    dcf_result=result,
+                    scenario_rows=scenario_rows,
+                    relative_df=relative,
+                    rel_breakdown=rel_breakdown,
+                    rel_price=rel_price,
+                    blended_price=blended_price,
+                    effective_price=effective_price,
+                    expected_dcf_price=expected_dcf_price,
+                    rec=rec,
+                    approach_eval=approach_eval,
+                    peer_rows=peer_rows,
+                )
+                st.download_button(
+                    label="📥 Download Valuation Report (PDF)",
+                    data=pdf_report_bytes,
+                    file_name=f"{c['symbol'].replace('.JK', '')}_Valuation_Report.pdf",
+                    mime="application/pdf",
+                    key=key("dl_pdf_overview"),
+                    type="primary",
+                    use_container_width=True
+                )
+            else:
+                st.info("PDF engine readying...")
         except Exception as _pdf_err:
             st.caption(f"PDF generator ready: {_pdf_err}")
 
