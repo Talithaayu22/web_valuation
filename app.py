@@ -1171,32 +1171,6 @@ with dcf_tab:
 
         st.dataframe(scen_df.style.format(format_dict, na_rep="—"), width="stretch")
 
-        # Probability-Weighted Expected DCF Fair Value Summary Card
-        if expected_dcf_price is not None and base_dcf_price and base_dcf_price > 0:
-            exp_col1, exp_col2, exp_col3 = st.columns(3)
-            with exp_col1:
-                st.metric(
-                    "Expected DCF Value (Probability-Weighted)",
-                    f"Rp {expected_dcf_price:,.2f}",
-                    help=f"Weighted average across Bear ({norm_probs['Bear']:.1%}), Base ({norm_probs['Base']:.1%}), and Bull ({norm_probs['Bull']:.1%}) regimes."
-                )
-            with exp_col2:
-                diff_base = ((expected_dcf_price / base_dcf_price) - 1.0)
-                st.metric(
-                    "Delta vs Base DCF",
-                    f"{diff_base:+.2%}",
-                    help=f"Variance between probability-weighted expected DCF (Rp {expected_dcf_price:,.2f}) and deterministic Base Case (Rp {base_dcf_price:,.2f})."
-                )
-            with exp_col3:
-                market_p = c.get("price")
-                if market_p and market_p > 0:
-                    exp_upside = ((expected_dcf_price / market_p) - 1.0)
-                    st.metric(
-                        "Expected Upside / Downside vs Market",
-                        f"{exp_upside:+.1%}",
-                        help=f"Expected upside or downside of probability-weighted intrinsic value vs current market price (Rp {market_p:,.2f})."
-                    )
-
         st.button("Edit scenario drivers", key="btn_edit_scenario_drivers")
         components.html(
             """
