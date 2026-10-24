@@ -505,69 +505,106 @@ with assumptions_tab:
         # Full-Width Section 04 at the bottom
         st.divider()
         st.markdown("#### 04 · Scenario modeling & stress testing")
-        st.caption("Simulates macroeconomic and operational regimes across Bear, Base, and Bull cases. Stresses operating execution alongside capital market discount rates and reinvestment intensity.")
+        st.caption("Simulates macroeconomic and operational regimes across Bear, Base, and Bull cases. Deviations are applied directly to each driver relative to the company baseline.")
         fields["scenario_mode"] = "Coherent Macro & Operating World"
 
-        pct("Master scenario shift · Bull/Bear (+/- %)", "scenario_shift", 0, 20, 
-            help="Base symmetric deviation applied to Bull/Bear cases. Default 2.0% translates to ±2.0% on revenue growth and EBIT margins.")
+        # Baseline driver references for company-specific context
+        base_g = initial.growth * 100
+        base_m = initial.ebit_margin * 100
+        base_w = initial.wacc * 100
+        base_tg = initial.terminal_growth * 100
+        base_r = initial.terminal_roic * 100
 
         with st.expander("Scenario Calibration (Bear & Bull Deviations)", expanded=True):
             st.caption("Customize specific deviations for Bull and Bear scenarios across operating, macro discount, and reinvestment drivers.")
-            master_s = fields.get("scenario_shift", initial.scenario_shift) * 100
 
             sc_c1, sc_c2 = st.columns(2)
             with sc_c1:
                 st.markdown("##### Bear Scenario (Economic Downturn)")
+                b_g_def = float(saved.get("bear_growth_shift", getattr(initial, "bear_growth_shift", -0.02)) * 100)
                 fields["bear_growth_shift"] = st.number_input(
-                    "Revenue growth shift (%)", value=float(saved.get("bear_growth_shift", getattr(initial, "bear_growth_shift", -master_s / 100)) * 100),
-                    step=0.25, key=key("bear_growth_shift"), help="Percentage points added to revenue growth in Bear scenario."
+                    f"Revenue growth shift (%) · Implies {base_g + b_g_def:.1f}% (Base {base_g:.1f}%)",
+                    value=b_g_def, step=0.25, key=key("bear_growth_shift"),
+                    help=f"Percentage points added to revenue growth in Bear scenario. Implies {base_g + b_g_def:.2f}% (Base: {base_g:.2f}%)."
                 ) / 100
+
+                b_m_def = float(saved.get("bear_margin_shift", getattr(initial, "bear_margin_shift", -0.02)) * 100)
                 fields["bear_margin_shift"] = st.number_input(
-                    "EBIT margin shift (%)", value=float(saved.get("bear_margin_shift", getattr(initial, "bear_margin_shift", -master_s / 100)) * 100),
-                    step=0.25, key=key("bear_margin_shift"), help="Percentage points added to EBIT margin in Bear scenario."
+                    f"EBIT margin shift (%) · Implies {base_m + b_m_def:.1f}% (Base {base_m:.1f}%)",
+                    value=b_m_def, step=0.25, key=key("bear_margin_shift"),
+                    help=f"Percentage points added to EBIT margin in Bear scenario. Implies {base_m + b_m_def:.2f}% (Base: {base_m:.2f}%)."
                 ) / 100
+
+                b_w_def = float(saved.get("bear_wacc_shift", getattr(initial, "bear_wacc_shift", 0.005)) * 100)
                 fields["bear_wacc_shift"] = st.number_input(
-                    "WACC shift (%)", value=float(saved.get("bear_wacc_shift", getattr(initial, "bear_wacc_shift", 0.005)) * 100),
-                    step=0.10, key=key("bear_wacc_shift"), help="Credit spread / risk premium expansion in distress."
+                    f"WACC shift (%) · Implies {base_w + b_w_def:.2f}% (Base {base_w:.2f}%)",
+                    value=b_w_def, step=0.10, key=key("bear_wacc_shift"),
+                    help=f"Credit spread / risk premium expansion in distress. Implies {base_w + b_w_def:.2f}% (Base: {base_w:.2f}%)."
                 ) / 100
+
+                b_tg_def = float(saved.get("bear_g_shift", getattr(initial, "bear_g_shift", -0.005)) * 100)
                 fields["bear_g_shift"] = st.number_input(
-                    "Terminal growth shift (%)", value=float(saved.get("bear_g_shift", getattr(initial, "bear_g_shift", -0.005)) * 100),
-                    step=0.10, key=key("bear_g_shift"), help="Long-term economic slowdown."
+                    f"Terminal growth shift (%) · Implies {base_tg + b_tg_def:.2f}% (Base {base_tg:.2f}%)",
+                    value=b_tg_def, step=0.10, key=key("bear_g_shift"),
+                    help=f"Long-term economic slowdown. Implies {base_tg + b_tg_def:.2f}% (Base: {base_tg:.2f}%)."
                 ) / 100
+
+                b_r_def = float(saved.get("bear_roic_shift", getattr(initial, "bear_roic_shift", -0.010)) * 100)
                 fields["bear_roic_shift"] = st.number_input(
-                    "Terminal ROIC shift (%)", value=float(saved.get("bear_roic_shift", getattr(initial, "bear_roic_shift", -0.010)) * 100),
-                    step=0.25, key=key("bear_roic_shift"), help="Moat erosion under economic pressure."
+                    f"Terminal ROIC shift (%) · Implies {base_r + b_r_def:.2f}% (Base {base_r:.2f}%)",
+                    value=b_r_def, step=0.25, key=key("bear_roic_shift"),
+                    help=f"Competitive moat erosion under economic pressure. Implies {base_r + b_r_def:.2f}% (Base: {base_r:.2f}%)."
                 ) / 100
+
+                b_re_def = float(saved.get("bear_reinvest_shift", getattr(initial, "bear_reinvest_shift", 0.010)) * 100)
                 fields["bear_reinvest_shift"] = st.number_input(
-                    "CapEx & NWC drag (%)", value=float(saved.get("bear_reinvest_shift", getattr(initial, "bear_reinvest_shift", 0.010)) * 100),
-                    step=0.25, key=key("bear_reinvest_shift"), help="Working capital and capital intensity stretch in downturn."
+                    f"CapEx & NWC drag (%) · Implies {b_re_def:+.2f}% reinvestment burden",
+                    value=b_re_def, step=0.25, key=key("bear_reinvest_shift"),
+                    help="Working capital stretch and capital intensity burden in downturn."
                 ) / 100
 
             with sc_c2:
                 st.markdown("##### Bull Scenario (Economic Expansion)")
+                u_g_def = float(saved.get("bull_growth_shift", getattr(initial, "bull_growth_shift", 0.02)) * 100)
                 fields["bull_growth_shift"] = st.number_input(
-                    "Revenue growth shift (%)", value=float(saved.get("bull_growth_shift", getattr(initial, "bull_growth_shift", master_s / 100)) * 100),
-                    step=0.25, key=key("bull_growth_shift"), help="Percentage points added to revenue growth in Bull scenario."
+                    f"Revenue growth shift (%) · Implies {base_g + u_g_def:.1f}% (Base {base_g:.1f}%)",
+                    value=u_g_def, step=0.25, key=key("bull_growth_shift"),
+                    help=f"Percentage points added to revenue growth in Bull scenario. Implies {base_g + u_g_def:.2f}% (Base: {base_g:.2f}%)."
                 ) / 100
+
+                u_m_def = float(saved.get("bull_margin_shift", getattr(initial, "bull_margin_shift", 0.02)) * 100)
                 fields["bull_margin_shift"] = st.number_input(
-                    "EBIT margin shift (%)", value=float(saved.get("bull_margin_shift", getattr(initial, "bull_margin_shift", master_s / 100)) * 100),
-                    step=0.25, key=key("bull_margin_shift"), help="Percentage points added to EBIT margin in Bull scenario."
+                    f"EBIT margin shift (%) · Implies {base_m + u_m_def:.1f}% (Base {base_m:.1f}%)",
+                    value=u_m_def, step=0.25, key=key("bull_margin_shift"),
+                    help=f"Percentage points added to EBIT margin in Bull scenario. Implies {base_m + u_m_def:.2f}% (Base: {base_m:.2f}%)."
                 ) / 100
+
+                u_w_def = float(saved.get("bull_wacc_shift", getattr(initial, "bull_wacc_shift", -0.005)) * 100)
                 fields["bull_wacc_shift"] = st.number_input(
-                    "WACC shift (%)", value=float(saved.get("bull_wacc_shift", getattr(initial, "bull_wacc_shift", -0.005)) * 100),
-                    step=0.10, key=key("bull_wacc_shift"), help="Risk premium compression in economic expansion."
+                    f"WACC shift (%) · Implies {base_w + u_w_def:.2f}% (Base {base_w:.2f}%)",
+                    value=u_w_def, step=0.10, key=key("bull_wacc_shift"),
+                    help=f"Risk premium compression in economic expansion. Implies {base_w + u_w_def:.2f}% (Base: {base_w:.2f}%)."
                 ) / 100
+
+                u_tg_def = float(saved.get("bull_g_shift", getattr(initial, "bull_g_shift", 0.005)) * 100)
                 fields["bull_g_shift"] = st.number_input(
-                    "Terminal growth shift (%)", value=float(saved.get("bull_g_shift", getattr(initial, "bull_g_shift", 0.005)) * 100),
-                    step=0.10, key=key("bull_g_shift"), help="Higher sustainable economic growth."
+                    f"Terminal growth shift (%) · Implies {base_tg + u_tg_def:.2f}% (Base {base_tg:.2f}%)",
+                    value=u_tg_def, step=0.10, key=key("bull_g_shift"),
+                    help=f"Higher sustainable economic growth. Implies {base_tg + u_tg_def:.2f}% (Base: {base_tg:.2f}%)."
                 ) / 100
+
+                u_r_def = float(saved.get("bull_roic_shift", getattr(initial, "bull_roic_shift", 0.010)) * 100)
                 fields["bull_roic_shift"] = st.number_input(
-                    "Terminal ROIC shift (%)", value=float(saved.get("bull_roic_shift", getattr(initial, "bull_roic_shift", 0.010)) * 100),
-                    step=0.25, key=key("bull_roic_shift"), help="Enhanced returns on capital during expansion."
+                    f"Terminal ROIC shift (%) · Implies {base_r + u_r_def:.2f}% (Base {base_r:.2f}%)",
+                    value=u_r_def, step=0.25, key=key("bull_roic_shift"),
+                    help=f"Enhanced returns on capital during expansion. Implies {base_r + u_r_def:.2f}% (Base: {base_r:.2f}%)."
                 ) / 100
+
+                u_re_def = float(saved.get("bull_reinvest_shift", getattr(initial, "bull_reinvest_shift", -0.010)) * 100)
                 fields["bull_reinvest_shift"] = st.number_input(
-                    "CapEx & NWC boost (%)", value=float(saved.get("bull_reinvest_shift", getattr(initial, "bull_reinvest_shift", -0.010)) * 100),
-                    step=0.25, key=key("bull_reinvest_shift"), help="Operational and capital efficiency improvement."
+                    f"CapEx & NWC boost (%) · Implies {u_re_def:+.2f}% capital efficiency",
+                    value=u_re_def, step=0.25, key=key("bull_reinvest_shift"),
+                    help="Operational and capital efficiency improvement."
                 ) / 100
 
         st.divider()
@@ -641,8 +678,8 @@ base_dcf_price = result["price"] if result and pd.notna(result.get("price")) els
 scenario_configs = [
     {
         "label": "Bear",
-        "growth_shift": getattr(a, "bear_growth_shift", -a.scenario_shift),
-        "margin_shift": getattr(a, "bear_margin_shift", -a.scenario_shift),
+        "growth_shift": getattr(a, "bear_growth_shift", -0.02),
+        "margin_shift": getattr(a, "bear_margin_shift", -0.02),
         "wacc_shift": getattr(a, "bear_wacc_shift", 0.005),
         "g_shift": getattr(a, "bear_g_shift", -0.005),
         "roic_shift": getattr(a, "bear_roic_shift", -0.010),
@@ -659,8 +696,8 @@ scenario_configs = [
     },
     {
         "label": "Bull",
-        "growth_shift": getattr(a, "bull_growth_shift", a.scenario_shift),
-        "margin_shift": getattr(a, "bull_margin_shift", a.scenario_shift),
+        "growth_shift": getattr(a, "bull_growth_shift", 0.02),
+        "margin_shift": getattr(a, "bull_margin_shift", 0.02),
         "wacc_shift": getattr(a, "bull_wacc_shift", -0.005),
         "g_shift": getattr(a, "bull_g_shift", 0.005),
         "roic_shift": getattr(a, "bull_roic_shift", 0.010),
