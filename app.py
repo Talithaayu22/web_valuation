@@ -55,8 +55,133 @@ st.markdown("""<style>
 [data-testid="stSidebar"] {border-right:1px solid #dfe8e5}
 h1 {font-weight:650!important; letter-spacing:-1.5px!important}
 h2,h3 {letter-spacing:-.5px!important}
-[data-testid="stMetric"] {background:white; border:1px solid #e0e8e5; border-radius:12px; padding:18px 20px}
-[data-testid="stMetricLabel"] {color:#5f7578; font-size:12px; text-transform:uppercase; letter-spacing:.7px}
+/* --- Institutional KPI Metric Card Styling --- */
+[data-testid="stMetric"] {
+    background: #ffffff !important;
+    border: 1px solid #e0e8e5 !important;
+    border-radius: 12px !important;
+    padding: 14px 16px !important;
+    min-height: 108px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    box-sizing: border-box !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+[data-testid="stMetric"]:hover {
+    border-color: #087f69 !important;
+    box-shadow: 0 3px 10px rgba(8, 127, 105, 0.07) !important;
+}
+
+/* Metric Label: Eliminate ellipsis, allow natural multi-line wrapping */
+[data-testid="stMetricLabel"] {
+    color: #5f7578 !important;
+    min-height: 2.7em !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    margin-bottom: 6px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+
+[data-testid="stMetricLabel"],
+[data-testid="stMetricLabel"] * {
+    color: #5f7578 !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    line-height: 1.35 !important;
+}
+
+/* Metric Value: Fit large IDR values and percentages without clipping or ellipsis */
+[data-testid="stMetricValue"] {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+
+[data-testid="stMetricValue"],
+[data-testid="stMetricValue"] * {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    font-size: clamp(1.18rem, 1.5vw, 1.62rem) !important;
+    font-weight: 700 !important;
+    color: #173e37 !important;
+    line-height: 1.25 !important;
+}
+
+/* Metric Delta */
+[data-testid="stMetricDelta"],
+[data-testid="stMetricDelta"] * {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    font-size: 0.85rem !important;
+}
+
+/* Ensure column flex stretch so all KPI cards in a row have identical height */
+div[data-testid="column"] {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+div[data-testid="column"] > div[data-testid="stMetric"] {
+    flex: 1 1 100% !important;
+    height: 100% !important;
+}
+
+div[data-testid="column"] > div:has([data-testid="stMetric"]) {
+    flex: 1 1 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Viewport responsive breakpoints */
+@media (max-width: 1200px) {
+    [data-testid="stMetric"] {
+        padding: 12px 14px !important;
+        min-height: 100px !important;
+    }
+    [data-testid="stMetricLabel"],
+    [data-testid="stMetricLabel"] * {
+        font-size: 11px !important;
+    }
+    [data-testid="stMetricValue"],
+    [data-testid="stMetricValue"] * {
+        font-size: clamp(1.1rem, 1.4vw, 1.45rem) !important;
+    }
+}
+
+@media (max-width: 900px) {
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+        flex-wrap: wrap !important;
+        gap: 12px !important;
+    }
+    div[data-testid="column"]:has([data-testid="stMetric"]) {
+        min-width: calc(50% - 12px) !important;
+        flex: 1 1 calc(50% - 12px) !important;
+    }
+}
+
+@media (max-width: 600px) {
+    div[data-testid="column"]:has([data-testid="stMetric"]) {
+        min-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+}
 .eyebrow {color:#087f69; font-size:12px; font-weight:700; letter-spacing:2px; margin-bottom:10px}
 .badge {display:inline-block; background:#e3f3ec; color:#087f69; padding:5px 12px; border-radius:20px; font-size:12px}
 .hero {padding:23px 28px; background:#173e37; color:white; border-radius:14px; margin:16px 0 24px}
@@ -227,14 +352,16 @@ with assumptions_tab:
     st.subheader("Valuation assumptions & methodology lab")
     st.caption("Review, customize, and stress-test the three fundamental pillars of the valuation model. Changes update all connected statements, DCF cash flows, and relative valuation bridges.")
 
-    # Live Metric Summary Header
-    m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
-    m_col1.metric("Calculated WACC", f"{initial.wacc:.2%}")
-    m_col2.metric("Cost of Equity", f"{initial.cost_of_equity:.2%}")
-    m_col3.metric("Borrowing Cost (Kd)", f"{initial.debt_rate:.2%}")
-    m_col4.metric("Debt Weight", f"{initial.debt_weight:.0%}")
-    m_col5.metric("Initial Growth (Y1–5)", f"{initial.growth:.1%}")
-    m_col6.metric("EBIT Margin (Y1–5)", f"{initial.ebit_margin:.1%}")
+    # Live Metric Summary Header (2 rows x 3 columns for balanced responsiveness and readability)
+    m_r1_1, m_r1_2, m_r1_3 = st.columns(3)
+    m_r1_1.metric("Calculated WACC", f"{initial.wacc:.2%}")
+    m_r1_2.metric("Cost of Equity", f"{initial.cost_of_equity:.2%}")
+    m_r1_3.metric("Borrowing Cost (Kd)", f"{initial.debt_rate:.2%}")
+
+    m_r2_1, m_r2_2, m_r2_3 = st.columns(3)
+    m_r2_1.metric("Debt Weight", f"{initial.debt_weight:.0%}")
+    m_r2_2.metric("Initial Growth (Y1–5)", f"{initial.growth:.1%}")
+    m_r2_3.metric("EBIT Margin (Y1–5)", f"{initial.ebit_margin:.1%}")
     st.divider()
 
     with st.form(key("assumptions")):
@@ -488,7 +615,7 @@ with overview:
     st.markdown(
         f"""<div style="background-color: {rec['color']}15; border-left: 5px solid {rec['color']}; padding: 14px 18px; border-radius: 8px; margin: 10px 0 18px;">
         <span style="font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: {rec['color']}; text-transform: uppercase;">INVESTMENT RECOMMENDATION · MID-TERM DECISION CRITERIA</span>
-        <div style="display: flex; align-items: baseline; gap: 16px; margin: 6px 0 4px;">
+        <div style="display: flex; align-items: baseline; gap: 16px; margin: 6px 0 4px; flex-wrap: wrap;">
             <span style="font-size: 24px; font-weight: 800; color: {rec['color']};">{rec['rating']}</span>
             {upside_str}
         </div>
