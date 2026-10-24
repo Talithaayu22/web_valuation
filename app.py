@@ -32,12 +32,12 @@ except ImportError:
 try:
     from valuation.data import (
         CATALOG, BILLION, demo_company, demo_peers, fetch_company, peer_record, ticker_symbol,
-        get_default_peers_for_ticker, get_or_fetch_peers, rank_peers_similarity
+        get_default_peers_for_ticker, get_or_fetch_peers, rank_peers_similarity, get_company_idx_metadata
     )
 except ImportError:
     from valuation.data import (
         CATALOG, BILLION, demo_company, fetch_company, peer_record, ticker_symbol,
-        get_default_peers_for_ticker, rank_peers_similarity
+        get_default_peers_for_ticker, rank_peers_similarity, get_company_idx_metadata
     )
     def demo_peers():
         p1 = demo_company()
@@ -232,6 +232,12 @@ def get_company(symbol):
 
 
 def activate(company, saved=None):
+    if company and not company.get("demo") and company.get("symbol"):
+        idx_meta = get_company_idx_metadata(company["symbol"])
+        if idx_meta:
+            company["sector"] = idx_meta["sector"]
+            company["industry"] = idx_meta["sub_industry"]
+            company["name"] = idx_meta["name"]
     st.session_state.company = company
     st.session_state.revision = st.session_state.get("revision", 0) + 1
     st.session_state.saved_inputs = saved or {}
@@ -253,6 +259,12 @@ def pack_company(c):
 def unpack_company(c):
     from io import StringIO
     out = dict(c)
+    if not out.get("demo") and out.get("symbol"):
+        idx_meta = get_company_idx_metadata(out["symbol"])
+        if idx_meta:
+            out["sector"] = idx_meta["sector"]
+            out["industry"] = idx_meta["sub_industry"]
+            out["name"] = idx_meta["name"]
     out["historical"] = pd.read_json(StringIO(c["historical"]), orient="split", convert_axes=False)
     out["raw"] = {name: pd.read_json(StringIO(data), orient="split", convert_axes=False) for name, data in c.get("raw", {}).items()}
     return out
@@ -301,6 +313,12 @@ with st.sidebar:
             st.caption("Save your first analysis below after modelling a company.")
 
 c = st.session_state.company
+if c and not c.get("demo") and c.get("symbol"):
+    idx_meta = get_company_idx_metadata(c["symbol"])
+    if idx_meta:
+        c["sector"] = idx_meta["sector"]
+        c["industry"] = idx_meta["sub_industry"]
+        c["name"] = idx_meta["name"]
 rev = st.session_state.revision
 saved = st.session_state.saved_inputs
 key = lambda name: f"{rev}_{name}"
@@ -911,6 +929,12 @@ if "peer_companies" not in st.session_state or st.session_state.peer_companies i
 active_peers = st.session_state.get("peer_companies", [])
 if active_peers:
     for pc in active_peers:
+        if pc and not pc.get("demo") and pc.get("symbol"):
+            p_idx = get_company_idx_metadata(pc["symbol"])
+            if p_idx:
+                pc["sector"] = p_idx["sector"]
+                pc["industry"] = p_idx["sub_industry"]
+                pc["name"] = p_idx["name"]
         if st.session_state.get(key(f"include_{pc['symbol']}"), True):
             try:
                 p_fx = fx if pc.get("financial_currency") == "USD" else 1.0
