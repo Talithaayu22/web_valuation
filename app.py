@@ -41,11 +41,23 @@ except ImportError:
             except Exception as e:
                 errors.append(f"{t}: {e}")
         return results, errors
-from valuation.model import (
-    Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
-    relative_values, infer_assumptions, compute_historical_roic, composite_relative_value, blended_valuation,
-    evaluate_approach_weights, investment_recommendation, explain_peer_selection
-)
+try:
+    from valuation.model import (
+        Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
+        relative_values, infer_assumptions, compute_historical_roic, composite_relative_value, blended_valuation,
+        evaluate_approach_weights, investment_recommendation, explain_peer_selection
+    )
+except ImportError:
+    import importlib
+    import sys
+    if "valuation.model" in sys.modules:
+        import valuation.model
+        importlib.reload(valuation.model)
+    from valuation.model import (
+        Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
+        relative_values, infer_assumptions, compute_historical_roic, composite_relative_value, blended_valuation,
+        evaluate_approach_weights, investment_recommendation, explain_peer_selection
+    )
 from valuation.export import workbook
 from valuation import storage
 
