@@ -41,23 +41,21 @@ except ImportError:
             except Exception as e:
                 errors.append(f"{t}: {e}")
         return results, errors
-try:
-    from valuation.model import (
-        Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
-        relative_values, infer_assumptions, compute_historical_roic, composite_relative_value, blended_valuation,
-        evaluate_approach_weights, investment_recommendation, explain_peer_selection
-    )
-except ImportError:
-    import importlib
-    import sys
-    if "valuation.model" in sys.modules:
-        import valuation.model
-        importlib.reload(valuation.model)
-    from valuation.model import (
-        Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
-        relative_values, infer_assumptions, compute_historical_roic, composite_relative_value, blended_valuation,
-        evaluate_approach_weights, investment_recommendation, explain_peer_selection
-    )
+import importlib
+import sys
+if "valuation.model" in sys.modules:
+    import valuation.model
+    importlib.reload(valuation.model)
+from valuation.model import (
+    Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
+    relative_values, infer_assumptions, compute_historical_roic, composite_relative_value, blended_valuation,
+    evaluate_approach_weights, investment_recommendation, explain_peer_selection
+)
+
+def make_assumptions(**kwargs):
+    valid_keys = getattr(Assumptions, "__dataclass_fields__", {}).keys()
+    filtered = {k: v for k, v in kwargs.items() if k in valid_keys}
+    return Assumptions(**filtered)
 from valuation.export import workbook
 from valuation import storage
 
@@ -359,7 +357,7 @@ def inferred_assumptions():
     return infer_assumptions(historical, b, c)
 
 
-initial = Assumptions(**saved["assumptions"]) if saved.get("assumptions") else inferred_assumptions()
+initial = make_assumptions(**saved["assumptions"]) if saved.get("assumptions") else inferred_assumptions()
 with assumptions_tab:
     st.subheader("Valuation assumptions & methodology lab")
     st.caption("Review, customize, and stress-test the three fundamental pillars of the valuation model. Changes update all connected statements, DCF cash flows, and relative valuation bridges.")
@@ -570,7 +568,7 @@ with assumptions_tab:
 
         st.divider()
         st.form_submit_button("Apply assumptions", type="primary", use_container_width=True)
-    a = Assumptions(**fields)
+    a = make_assumptions(**fields)
 
     # Macro convergence & GDP ceiling warning (Damodaran Boundary)
     if a.terminal_growth > 0.040:
