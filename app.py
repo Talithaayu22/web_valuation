@@ -809,6 +809,14 @@ for cfg in scenario_configs:
         }
         scenario_rows.append(row_dict)
 
+# Probability-weighted expected DCF valuation across scenarios
+norm_probs = a.normalized_scenario_probabilities()
+prices_by_scenario = {r["Scenario"]: r["Value / share"] for r in scenario_rows if pd.notna(r.get("Value / share"))}
+if len(prices_by_scenario) == 3 and base_dcf_price and base_dcf_price > 0:
+    expected_dcf_price = sum(prices_by_scenario[scen] * norm_probs.get(scen, 0.0) for scen in ["Bear", "Base", "Bull"])
+else:
+    expected_dcf_price = base_dcf_price
+
 # Prepare peer context and blended valuation
 target_ebitda = b["revenue"] - b["cogs"] - b["opex"]
 target_profile = dict(
@@ -892,7 +900,7 @@ if peer_rows and shares > 0:
             return_breakdown=True
         )
 
-dcf_p = result["price"] if result else None
+dcf_p = expected_dcf_price if (expected_dcf_price and pd.notna(expected_dcf_price)) else (result["price"] if result else None)
 blended_price = blended_valuation(dcf_p, rel_price, a.dcf_weight, a.relative_weight)
 effective_price = blended_price if pd.notna(blended_price) else dcf_p
 
@@ -922,7 +930,11 @@ with overview:
     cols = st.columns(5)
     cols[0].metric("Reference price", f"Rp {price:,.0f}" if price else "Not available")
     cols[1].metric("Blended fair value", f"Rp {effective_price:,.0f}" if effective_price and effective_price > 0 else ("Not eligible" if effective_price is not None and effective_price <= 0 else "Check inputs"))
-    cols[2].metric("DCF value / share", f"Rp {result['price']:,.0f}" if result and result['price'] > 0 else ("Not eligible" if result and result['price'] <= 0 else "Check assumptions"))
+    cols[2].metric(
+        "DCF value / share",
+        f"Rp {dcf_p:,.0f}" if dcf_p and dcf_p > 0 else ("Not eligible" if dcf_p is not None and dcf_p <= 0 else "Check assumptions"),
+        help=f"Probability-weighted expected DCF value across Bear ({norm_probs.get('Bear', 0.25):.0%}), Base ({norm_probs.get('Base', 0.50):.0%}), and Bull ({norm_probs.get('Bull', 0.25):.0%}) scenarios. Base case alone: Rp {base_dcf_price:,.0f}." if base_dcf_price else None
+    )
     cols[3].metric("Relative value / share", f"Rp {rel_price:,.0f}" if pd.notna(rel_price) and rel_price > 0 else "Needs >= 2 peers")
     upside = (effective_price / price - 1) if effective_price and price and effective_price > 0 else None
     cols[4].metric("Implied upside / downside", f"{upside:+.1%}" if upside is not None else "—")
@@ -948,7 +960,7 @@ with overview:
         ff_items.append({
             "Method": "DCF (FCFF) Range",
             "Low": min(bear_price, bull_price),
-            "Mid": base_price,
+            "Mid": dcf_p if (dcf_p and pd.notna(dcf_p)) else base_price,
             "High": max(bear_price, bull_price),
             "Color": "#087f69"
         })
@@ -1122,25 +1134,19 @@ with dcf_tab:
         st.caption("Terminal FCFF = Year 6 NOPAT × (1 − terminal growth / terminal ROIC). Annual cash flows are discounted at year-end. The equity bridge uses opening cash and debt, not year-5 balances.")
 
         st.markdown("#### Scenario analysis · Bear / Base / Bull")
-        norm_probs = a.normalized_scenario_probabilities()
-        prices_by_scenario = {r["Scenario"]: r["Value / share"] for r in scenario_rows if pd.notna(r.get("Value / share"))}
-
         table_rows = list(scenario_rows)
-        expected_dcf_price = None
-        if len(prices_by_scenario) == 3 and base_dcf_price and base_dcf_price > 0:
-            exp_price = sum(r["Value / share"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
+        if len(prices_by_scenario) == 3 and base_dcf_price and base_dcf_price > 0 and expected_dcf_price is not None:
             exp_rev = sum(r["Year 5 revenue"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
             exp_ebit = sum(r["Year 5 EBIT"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
             exp_wacc = sum(r["WACC"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
             exp_g = sum(r["Terminal growth"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
             exp_roic = sum(r["Terminal ROIC"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
-            exp_upside = ((exp_price / base_dcf_price) - 1.0)
-            expected_dcf_price = exp_price
+            exp_upside = ((expected_dcf_price / base_dcf_price) - 1.0)
 
             expected_row = {
                 "Scenario": "Expected (Weighted)",
                 "Probability": 1.0,
-                "Value / share": exp_price,
+                "Value / share": expected_dcf_price,
                 "Upside / Downside": f"{exp_upside:+.1%}",
                 "Year 5 revenue": exp_rev,
                 "Year 5 EBIT": exp_ebit,
