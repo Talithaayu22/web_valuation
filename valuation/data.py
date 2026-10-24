@@ -9,6 +9,30 @@ import pandas as pd
 import yfinance as yf
 from .model import BASE_FIELDS
 
+
+try:
+    from curl_cffi import requests as curl_requests
+
+    class DoHSession(curl_requests.Session):
+        """curl_cffi Session that routes DNS queries over HTTPS (port 443)
+        to bypass ISP UDP port 53 DNS throttling / RCODE_SERVER_FAILURE.
+        """
+        def request(self, method, url, **kwargs):
+            if "doh_url" not in kwargs or not kwargs["doh_url"]:
+                kwargs["doh_url"] = "https://dns.google/dns-query"
+            try:
+                return super().request(method, url, **kwargs)
+            except Exception:
+                kwargs["doh_url"] = "https://cloudflare-dns.com/dns-query"
+                return super().request(method, url, **kwargs)
+
+    def get_doh_session():
+        return DoHSession(impersonate="chrome")
+
+except ImportError:
+    def get_doh_session():
+        return None
+
 BILLION = 1e9
 CATALOG = {
     "TLKM": "Telkom Indonesia", "ASII": "Astra International", "ICBP": "Indofood CBP",
@@ -167,7 +191,8 @@ def fetch_company(symbol):
     cache = Path(__file__).resolve().parents[1] / "data" / "yfinance"
     cache.mkdir(parents=True, exist_ok=True)
     yf.set_tz_cache_location(str(cache))
-    t = yf.Ticker(symbol)
+    session = get_doh_session()
+    t = yf.Ticker(symbol, session=session)
     info = t.get_info()
     income = t.get_income_stmt(freq="yearly")
     balance = t.get_balance_sheet(freq="yearly")
@@ -182,7 +207,7 @@ def fetch_company(symbol):
     reg_beta = None
     try:
         p_hist = t.history(period="5y", interval="1mo")["Close"].pct_change().dropna()
-        idx_hist = yf.Ticker("^JKSE").history(period="5y", interval="1mo")["Close"].pct_change().dropna()
+        idx_hist = yf.Ticker("^JKSE", session=session).history(period="5y", interval="1mo")["Close"].pct_change().dropna()
         comb = pd.concat([p_hist, idx_hist], axis=1).dropna()
         if len(comb) >= 12:
             cov = comb.cov().iloc[0, 1]
@@ -205,7 +230,7 @@ def fetch_company(symbol):
     if fin_curr and fin_curr != "IDR" and price_curr == "IDR":
         try:
             fx_sym = f"{fin_curr}IDR=X"
-            fx_ticker = yf.Ticker(fx_sym)
+            fx_ticker = yf.Ticker(fx_sym, session=session)
             fx_rate = fx_ticker.fast_info.get("lastPrice") or fx_ticker.info.get("regularMarketPrice")
             if fx_rate and math.isfinite(fx_rate) and fx_rate > 0:
                 suggested_fx = float(fx_rate)

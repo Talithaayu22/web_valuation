@@ -378,3 +378,10 @@ def test_relative_values_includes_harmonic_mean():
     comp_hm = composite_relative_value(df, case="Harmonic mean")
     assert math.isfinite(comp_hm)
     assert comp_hm > 0
+
+
+def test_get_doh_session_injects_secure_dns():
+    from valuation.data import get_doh_session
+    s = get_doh_session()
+    assert s is not None
+    assert hasattr(s, "request")
