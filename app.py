@@ -499,78 +499,80 @@ with assumptions_tab:
                 "Valuation weight · Relative (%)", "relative_weight", 0, 100,
                 help="Weight assigned to Comparable Peers relative valuation in the blended fair value. Default 25% provides an empirical market cross-check when peer similarity criteria are met."
             )
-
-            # Scenario Modeling: Coherent Macro & Operating World
-            st.markdown("---")
-            st.markdown("##### ◈ Scenario Modeling · Coherent Macro & Operating World")
-            st.caption("Simulates macroeconomic and operational regimes across Bear, Base, and Bull cases. Stresses operating execution alongside capital market discount rates and reinvestment intensity.")
-            fields["scenario_mode"] = "Coherent Macro & Operating World"
-
-            pct("Master scenario shift · Bull/Bear (+/- %)", "scenario_shift", 0, 20, 
-                help="Base symmetric deviation applied to Bull/Bear cases. Default 2.0% translates to ±2.0% on revenue growth and EBIT margins.")
-
-            # Expandable Fine-Tuning Calibration (All 6 drivers unconditionally available)
-            with st.expander("⚙️ Scenario Calibration (Bear & Bull Deviations)", expanded=True):
-                st.caption("Customize specific deviations for Bull and Bear scenarios across operating, macro discount, and reinvestment drivers.")
-                master_s = fields.get("scenario_shift", initial.scenario_shift) * 100
-
-                sc_c1, sc_c2 = st.columns(2)
-                with sc_c1:
-                    st.markdown("**Bear Scenario**")
-                    fields["bear_growth_shift"] = st.number_input(
-                        "Revenue growth shift (%)", value=float(saved.get("bear_growth_shift", getattr(initial, "bear_growth_shift", -master_s / 100)) * 100),
-                        step=0.25, key=key("bear_growth_shift"), help="Percentage points added to revenue growth in Bear scenario."
-                    ) / 100
-                    fields["bear_margin_shift"] = st.number_input(
-                        "EBIT margin shift (%)", value=float(saved.get("bear_margin_shift", getattr(initial, "bear_margin_shift", -master_s / 100)) * 100),
-                        step=0.25, key=key("bear_margin_shift"), help="Percentage points added to EBIT margin in Bear scenario."
-                    ) / 100
-                    fields["bear_wacc_shift"] = st.number_input(
-                        "WACC shift (%)", value=float(saved.get("bear_wacc_shift", getattr(initial, "bear_wacc_shift", 0.005)) * 100),
-                        step=0.10, key=key("bear_wacc_shift"), help="Credit spread / risk premium expansion in distress."
-                    ) / 100
-                    fields["bear_g_shift"] = st.number_input(
-                        "Terminal growth shift (%)", value=float(saved.get("bear_g_shift", getattr(initial, "bear_g_shift", -0.005)) * 100),
-                        step=0.10, key=key("bear_g_shift"), help="Long-term economic slowdown."
-                    ) / 100
-                    fields["bear_roic_shift"] = st.number_input(
-                        "Terminal ROIC shift (%)", value=float(saved.get("bear_roic_shift", getattr(initial, "bear_roic_shift", -0.010)) * 100),
-                        step=0.25, key=key("bear_roic_shift"), help="Moat erosion under economic pressure."
-                    ) / 100
-                    fields["bear_reinvest_shift"] = st.number_input(
-                        "CapEx & NWC drag (%)", value=float(saved.get("bear_reinvest_shift", getattr(initial, "bear_reinvest_shift", 0.010)) * 100),
-                        step=0.25, key=key("bear_reinvest_shift"), help="Working capital and capital intensity stretch in downturn."
-                    ) / 100
-
-                with sc_c2:
-                    st.markdown("**Bull Scenario**")
-                    fields["bull_growth_shift"] = st.number_input(
-                        "Revenue growth shift (%)", value=float(saved.get("bull_growth_shift", getattr(initial, "bull_growth_shift", master_s / 100)) * 100),
-                        step=0.25, key=key("bull_growth_shift"), help="Percentage points added to revenue growth in Bull scenario."
-                    ) / 100
-                    fields["bull_margin_shift"] = st.number_input(
-                        "EBIT margin shift (%)", value=float(saved.get("bull_margin_shift", getattr(initial, "bull_margin_shift", master_s / 100)) * 100),
-                        step=0.25, key=key("bull_margin_shift"), help="Percentage points added to EBIT margin in Bull scenario."
-                    ) / 100
-                    fields["bull_wacc_shift"] = st.number_input(
-                        "WACC shift (%)", value=float(saved.get("bull_wacc_shift", getattr(initial, "bull_wacc_shift", -0.005)) * 100),
-                        step=0.10, key=key("bull_wacc_shift"), help="Risk premium compression in economic expansion."
-                    ) / 100
-                    fields["bull_g_shift"] = st.number_input(
-                        "Terminal growth shift (%)", value=float(saved.get("bull_g_shift", getattr(initial, "bull_g_shift", 0.005)) * 100),
-                        step=0.10, key=key("bull_g_shift"), help="Higher sustainable economic growth."
-                    ) / 100
-                    fields["bull_roic_shift"] = st.number_input(
-                        "Terminal ROIC shift (%)", value=float(saved.get("bull_roic_shift", getattr(initial, "bull_roic_shift", 0.010)) * 100),
-                        step=0.25, key=key("bull_roic_shift"), help="Enhanced returns on capital during expansion."
-                    ) / 100
-                    fields["bull_reinvest_shift"] = st.number_input(
-                        "CapEx & NWC boost (%)", value=float(saved.get("bull_reinvest_shift", getattr(initial, "bull_reinvest_shift", -0.010)) * 100),
-                        step=0.25, key=key("bull_reinvest_shift"), help="Operational and capital efficiency improvement."
-                    ) / 100
-
             fields["other_claims"] = st.number_input("Minorities / other equity claims (IDR bn)", min_value=0., value=float(initial.other_claims), key=key("claims"), help="Deducts reported minority interests (NCI) from EV to bridge to Equity Value.")
             fields["nonoperating_assets"] = st.number_input("Additional non-operating assets (IDR bn)", min_value=0., value=float(initial.nonoperating_assets), key=key("nonop"), help="Adds non-operating investments / associates to EV.")
+
+        # Full-Width Section 04 at the bottom
+        st.divider()
+        st.markdown("#### 04 · Scenario modeling & stress testing")
+        st.caption("Simulates macroeconomic and operational regimes across Bear, Base, and Bull cases. Stresses operating execution alongside capital market discount rates and reinvestment intensity.")
+        fields["scenario_mode"] = "Coherent Macro & Operating World"
+
+        sc_top_c1, sc_top_c2 = st.columns([1, 2])
+        with sc_top_c1:
+            pct("Master scenario shift · Bull/Bear (+/- %)", "scenario_shift", 0, 20, 
+                help="Base symmetric deviation applied to Bull/Bear cases. Default 2.0% translates to ±2.0% on revenue growth and EBIT margins.")
+        with sc_top_c2:
+            st.info("💡 **Coherent Macro & Operating World**: Fine-tune specific operating, macro discount rate, and reinvestment deviations in the calibration panel below.")
+
+        with st.expander("⚙️ Scenario Calibration (Bear & Bull Deviations)", expanded=True):
+            st.caption("Customize specific deviations for Bull and Bear scenarios across operating, macro discount, and reinvestment drivers.")
+            master_s = fields.get("scenario_shift", initial.scenario_shift) * 100
+
+            sc_c1, sc_c2 = st.columns(2)
+            with sc_c1:
+                st.markdown("##### 🐻 Bear Scenario (Economic Downturn)")
+                fields["bear_growth_shift"] = st.number_input(
+                    "Revenue growth shift (%)", value=float(saved.get("bear_growth_shift", getattr(initial, "bear_growth_shift", -master_s / 100)) * 100),
+                    step=0.25, key=key("bear_growth_shift"), help="Percentage points added to revenue growth in Bear scenario."
+                ) / 100
+                fields["bear_margin_shift"] = st.number_input(
+                    "EBIT margin shift (%)", value=float(saved.get("bear_margin_shift", getattr(initial, "bear_margin_shift", -master_s / 100)) * 100),
+                    step=0.25, key=key("bear_margin_shift"), help="Percentage points added to EBIT margin in Bear scenario."
+                ) / 100
+                fields["bear_wacc_shift"] = st.number_input(
+                    "WACC shift (%)", value=float(saved.get("bear_wacc_shift", getattr(initial, "bear_wacc_shift", 0.005)) * 100),
+                    step=0.10, key=key("bear_wacc_shift"), help="Credit spread / risk premium expansion in distress."
+                ) / 100
+                fields["bear_g_shift"] = st.number_input(
+                    "Terminal growth shift (%)", value=float(saved.get("bear_g_shift", getattr(initial, "bear_g_shift", -0.005)) * 100),
+                    step=0.10, key=key("bear_g_shift"), help="Long-term economic slowdown."
+                ) / 100
+                fields["bear_roic_shift"] = st.number_input(
+                    "Terminal ROIC shift (%)", value=float(saved.get("bear_roic_shift", getattr(initial, "bear_roic_shift", -0.010)) * 100),
+                    step=0.25, key=key("bear_roic_shift"), help="Moat erosion under economic pressure."
+                ) / 100
+                fields["bear_reinvest_shift"] = st.number_input(
+                    "CapEx & NWC drag (%)", value=float(saved.get("bear_reinvest_shift", getattr(initial, "bear_reinvest_shift", 0.010)) * 100),
+                    step=0.25, key=key("bear_reinvest_shift"), help="Working capital and capital intensity stretch in downturn."
+                ) / 100
+
+            with sc_c2:
+                st.markdown("##### 🐂 Bull Scenario (Economic Expansion)")
+                fields["bull_growth_shift"] = st.number_input(
+                    "Revenue growth shift (%)", value=float(saved.get("bull_growth_shift", getattr(initial, "bull_growth_shift", master_s / 100)) * 100),
+                    step=0.25, key=key("bull_growth_shift"), help="Percentage points added to revenue growth in Bull scenario."
+                ) / 100
+                fields["bull_margin_shift"] = st.number_input(
+                    "EBIT margin shift (%)", value=float(saved.get("bull_margin_shift", getattr(initial, "bull_margin_shift", master_s / 100)) * 100),
+                    step=0.25, key=key("bull_margin_shift"), help="Percentage points added to EBIT margin in Bull scenario."
+                ) / 100
+                fields["bull_wacc_shift"] = st.number_input(
+                    "WACC shift (%)", value=float(saved.get("bull_wacc_shift", getattr(initial, "bull_wacc_shift", -0.005)) * 100),
+                    step=0.10, key=key("bull_wacc_shift"), help="Risk premium compression in economic expansion."
+                ) / 100
+                fields["bull_g_shift"] = st.number_input(
+                    "Terminal growth shift (%)", value=float(saved.get("bull_g_shift", getattr(initial, "bull_g_shift", 0.005)) * 100),
+                    step=0.10, key=key("bull_g_shift"), help="Higher sustainable economic growth."
+                ) / 100
+                fields["bull_roic_shift"] = st.number_input(
+                    "Terminal ROIC shift (%)", value=float(saved.get("bull_roic_shift", getattr(initial, "bull_roic_shift", 0.010)) * 100),
+                    step=0.25, key=key("bull_roic_shift"), help="Enhanced returns on capital during expansion."
+                ) / 100
+                fields["bull_reinvest_shift"] = st.number_input(
+                    "CapEx & NWC boost (%)", value=float(saved.get("bull_reinvest_shift", getattr(initial, "bull_reinvest_shift", -0.010)) * 100),
+                    step=0.25, key=key("bull_reinvest_shift"), help="Operational and capital efficiency improvement."
+                ) / 100
 
         st.divider()
         st.form_submit_button("Apply assumptions", type="primary", use_container_width=True)
