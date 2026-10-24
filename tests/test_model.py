@@ -877,3 +877,42 @@ def test_unvr_kino_pure_financial_similarity_no_penalty():
     kino_res = [r for r in ranked if r["ticker"] == "KINO.JK"][0]
     assert kino_res["similarity_score"] >= 60
     assert kino_res["confidence_level"] == "Moderate"
+
+
+def test_get_multiple_exclusion_details_detects_operating_and_net_loss():
+    from valuation.model import get_multiple_exclusion_details
+
+    p_valid = {
+        "ticker": "ISAT.JK",
+        "ev": 100000.0,
+        "market_cap": 50000.0,
+        "ebitda": 25000.0,
+        "ebit": 10000.0,
+        "net_income": 5000.0,
+        "book_equity": 30000.0
+    }
+    p_loss = {
+        "ticker": "EXCL.JK",
+        "ev": 90000.0,
+        "market_cap": 30000.0,
+        "ebitda": 18000.0,
+        "ebit": -233.0,
+        "net_income": -4426.0,
+        "book_equity": 28000.0
+    }
+
+    exclusions = get_multiple_exclusion_details([p_valid, p_loss])
+
+    # 1. EV / EBITDA and P / BV have zero exclusions
+    assert exclusions["EV / EBITDA"] == []
+    assert exclusions["P / BV"] == []
+
+    # 2. EV / EBIT identifies EXCL's negative EBIT
+    assert len(exclusions["EV / EBIT"]) == 1
+    assert "EXCL" in exclusions["EV / EBIT"][0]
+    assert "EBIT" in exclusions["EV / EBIT"][0]
+
+    # 3. P / E identifies EXCL's net loss
+    assert len(exclusions["P / E"]) == 1
+    assert "EXCL" in exclusions["P / E"][0]
+    assert "net income" in exclusions["P / E"][0]

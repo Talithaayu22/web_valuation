@@ -597,6 +597,40 @@ def composite_relative_value(
     return comp_price
 
 
+def get_multiple_exclusion_details(peers):
+    """Analyzes active peers and identifies specific reasons why peers were excluded
+    from each relative valuation multiple (e.g. negative operating profit, net loss).
+    """
+    multiples_spec = {
+        "EV / EBITDA": ("ebitda", "ev", "EBITDA"),
+        "EV / EBIT": ("ebit", "ev", "operating income (EBIT)"),
+        "P / E": ("net_income", "market_cap", "net income"),
+        "P / BV": ("book_equity", "market_cap", "book equity"),
+    }
+
+    details = {}
+    for m_name, (den_key, num_key, desc) in multiples_spec.items():
+        excluded_peers = []
+        for p in (peers or []):
+            den = p.get(den_key)
+            num = p.get(num_key)
+            sym = p.get("ticker", "").replace(".JK", "")
+
+            if den is None or not math.isfinite(den) or den <= 0:
+                if den is not None and math.isfinite(den) and den < 0:
+                    val_str = f"-Rp {abs(den):,.0f} bn" if abs(den) < 1000 else f"-Rp {abs(den)/1000:,.1f} T"
+                    excluded_peers.append(f"{sym} (negative {desc}: {val_str})")
+                elif den == 0:
+                    excluded_peers.append(f"{sym} (zero {desc})")
+                else:
+                    excluded_peers.append(f"{sym} (missing {desc})")
+            elif num is None or not math.isfinite(num) or num <= 0:
+                excluded_peers.append(f"{sym} (non-positive enterprise/market value)")
+
+        details[m_name] = excluded_peers
+    return details
+
+
 def explain_peer_selection(target_profile, peer_record):
     """Generates an intuitive, professional 'Why Selected?' explanation for a peer:
     - Confirms sub-industry match or cross-industry context

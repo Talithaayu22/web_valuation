@@ -71,6 +71,7 @@ except ImportError:
     generate_valuation_pdf = None
 
 from valuation.model import (
+    get_multiple_exclusion_details,
     Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
     relative_values, infer_assumptions, compute_historical_roic, composite_relative_value, blended_valuation,
     evaluate_approach_weights, investment_recommendation, explain_peer_selection
@@ -914,6 +915,7 @@ if peer_rows and shares > 0:
         book_equity=max(0.0, b.get("equity", 0.0) - a.other_claims),
     )
     relative = relative_values(peer_rows, target, b["cash"], b["short_debt"] + b["long_debt"], shares, a.other_claims, a.nonoperating_assets)
+    exclusion_info = get_multiple_exclusion_details(peer_rows)
     if len(peer_rows) >= 2:
         rel_price, rel_breakdown = composite_relative_value(
             relative,
@@ -928,6 +930,7 @@ dcf_p = expected_dcf_price if (expected_dcf_price and pd.notna(expected_dcf_pric
 blended_price = blended_valuation(dcf_p, rel_price, a.dcf_weight, a.relative_weight)
 effective_price = blended_price if pd.notna(blended_price) else dcf_p
 
+exclusion_info = get_multiple_exclusion_details(peer_rows) if 'exclusion_info' not in locals() else exclusion_info
 approach_eval = evaluate_approach_weights(target_profile, peer_rows, a.dcf_weight, a.relative_weight)
 rec = investment_recommendation(price, effective_price)
 
@@ -1451,14 +1454,17 @@ with peers_tab:
             peers_used = m_info.get("peers_used", 0)
             eff_w = m_info.get("effective_weight", 0.0)
 
+            excl_reasons = exclusion_info.get(m_name, []) if 'exclusion_info' in locals() else []
             if is_elig and pd.notna(price_val):
                 p_display = f"Rp {price_val:,.0f}"
                 sub_display = f"{mult_val:.2f}x ({sel_agg})"
                 status_html = f"<span style='color: #087f69; font-weight: 700; font-size: 11px;'>✅ ELIGIBLE ({peers_used} peers)</span>"
+                note_html = ""
             else:
                 p_display = "—"
                 sub_display = f"{mult_val:.2f}x" if pd.notna(mult_val) else "No peers"
                 status_html = f"<span style='color: #d9822b; font-weight: 700; font-size: 11px;'>⚠️ INELIGIBLE ({peers_used}/2 peers)</span>"
+                note_html = f"<div style='font-size: 10px; color: #8a5314; margin-top: 4px; line-height: 1.25;'>Excluded {', '.join(excl_reasons)} to prevent negative multiple distortion.</div>" if excl_reasons else ""
 
             st.markdown(
                 f"""<div style="background: #f8faf9; border: 1px solid #d2ded8; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
@@ -1466,23 +1472,50 @@ with peers_tab:
                 <div style="font-size: 22px; font-weight: 800; color: #1e332d; margin: 4px 0;">{p_display}</div>
                 <div style="font-size: 12px; color: #35504f;">{sub_display} &nbsp;|&nbsp; Eff. W: <b>{eff_w:.0%}</b></div>
                 <div style="margin-top: 4px;">{status_html}</div>
+                {note_html}
                 </div>""",
                 unsafe_allow_html=True
             )
 
-    # Multiples distribution table filtered by chosen aggregator
+    # Multiples distribution table filtered by chosen aggregator and eligibility (>= 2 peers)
     if not relative.empty:
         filtered_relative = relative[relative["Case"] == sel_agg] if "Case" in relative.columns else relative
+        if "Peers used" in filtered_relative.columns:
+            filtered_relative = filtered_relative[
+                (filtered_relative["Peers used"] >= 2) & 
+                (filtered_relative["Implied price (IDR)"].notna()) & 
+                (filtered_relative["Implied price (IDR)"] > 0)
+            ]
+
         st.markdown(f"**Multiples Benchmark & Implied Value ({sel_agg})**")
-        st.dataframe(
-            filtered_relative,
-            hide_index=True,
-            width="stretch",
-            column_config={
-                "Peer multiple": st.column_config.NumberColumn(format="%.2fx"),
-                "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")
-            }
-        )
+        if not filtered_relative.empty:
+            st.dataframe(
+                filtered_relative,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Peer multiple": st.column_config.NumberColumn(format="%.2fx"),
+                    "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")
+                }
+            )
+        else:
+            st.info("No multiples meet the eligibility requirement (minimum 2 valid peers required). DCF approach has 100% weighting.")
+
+        # Diagnostic alert for excluded multiples with peer reasons
+        ineligible_multiples = [m for m in metric_order if not rel_breakdown.get(m, {}).get("eligible", False)]
+        if ineligible_multiples:
+            warning_lines = []
+            for m in ineligible_multiples:
+                reasons = (exclusion_info.get(m, []) if 'exclusion_info' in locals() else [])
+                if reasons:
+                    warning_lines.append(f"• **{m}**: Excluded {', '.join(reasons)}.")
+            
+            if warning_lines:
+                st.warning(
+                    "**⚠️ Peer Exclusion Notice (Valuation Integrity Rule):**\n\n" +
+                    "\n".join(warning_lines) +
+                    "\n\n*Under Damodaran relative valuation standards, negative operating metrics are excluded to prevent negative multiple distortion. Multiples with fewer than 2 valid peers are omitted from the benchmark table and relative valuation calculation.*"
+                )
 
         # Plotly comparison chart
         st.markdown("##### Implied Price per Share Comparison")
