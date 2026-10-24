@@ -508,12 +508,8 @@ with assumptions_tab:
         st.caption("Simulates macroeconomic and operational regimes across Bear, Base, and Bull cases. Stresses operating execution alongside capital market discount rates and reinvestment intensity.")
         fields["scenario_mode"] = "Coherent Macro & Operating World"
 
-        sc_top_c1, sc_top_c2 = st.columns([1, 2])
-        with sc_top_c1:
-            pct("Master scenario shift · Bull/Bear (+/- %)", "scenario_shift", 0, 20, 
-                help="Base symmetric deviation applied to Bull/Bear cases. Default 2.0% translates to ±2.0% on revenue growth and EBIT margins.")
-        with sc_top_c2:
-            st.info("**Coherent Macro & Operating World**: Fine-tune specific operating, macro discount rate, and reinvestment deviations in the calibration panel below.")
+        pct("Master scenario shift · Bull/Bear (+/- %)", "scenario_shift", 0, 20, 
+            help="Base symmetric deviation applied to Bull/Bear cases. Default 2.0% translates to ±2.0% on revenue growth and EBIT margins.")
 
         with st.expander("Scenario Calibration (Bear & Bull Deviations)", expanded=True):
             st.caption("Customize specific deviations for Bull and Bear scenarios across operating, macro discount, and reinvestment drivers.")
