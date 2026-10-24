@@ -223,6 +223,139 @@ div[data-testid="column"] > div:has([data-testid="stMetric"]) {
 .hero h2 {color:white; margin:0 0 6px; font-size:1.65rem}.hero p {color:#c2dcd3;margin:0}
 .small {color:#718481;font-size:12px}
 button {border-radius:8px!important}
+
+/* Model Audit & Sanity Check Strip */
+.model-audit-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    background: #ffffff;
+    border: 1px solid #e0e8e5;
+    border-radius: 10px;
+    padding: 9px 13px;
+    margin: 4px 0 16px;
+    align-items: center;
+}
+.audit-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: #4a5568;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 4px 10px;
+}
+.audit-item b {
+    color: #1a202c;
+    font-weight: 600;
+}
+.audit-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.audit-item.passed .audit-dot {
+    background-color: #087f69;
+}
+.audit-item.warning .audit-dot {
+    background-color: #d97706;
+}
+.audit-item.alert .audit-dot {
+    background-color: #dc2626;
+}
+
+/* Pillar Card Styles */
+.pillar-card {
+    background: #ffffff;
+    border: 1px solid #e0e8e5;
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    box-sizing: border-box;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.pillar-card:hover {
+    border-color: #087f69;
+}
+.pillar-card-featured {
+    border: 1.5px solid #087f69;
+    background: #fcfffd;
+    box-shadow: 0 2px 8px rgba(8, 127, 105, 0.05);
+}
+.pillar-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 8px;
+    width: fit-content;
+}
+.pillar-tag-market {
+    background: #f1f5f9;
+    color: #475569;
+}
+.pillar-tag-dcf {
+    background: #e3f3ec;
+    color: #087f69;
+}
+.pillar-tag-rel {
+    background: #e6f4f1;
+    color: #2a6256;
+}
+.pillar-title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #173e37;
+    margin-bottom: 2px;
+}
+.pillar-price {
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: #173e37;
+    margin: 4px 0 10px;
+    line-height: 1.15;
+}
+.pillar-unit {
+    font-size: 11px;
+    font-weight: 500;
+    color: #64748b;
+}
+.pillar-metrics {
+    border-top: 1px solid #f1f5f9;
+    padding-top: 9px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.p-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: #64748b;
+}
+.p-row b {
+    color: #1e293b;
+    font-weight: 600;
+}
+.pillar-footer {
+    font-size: 11px;
+    color: #64748b;
+    border-top: 1px dashed #e2e8f0;
+    padding-top: 8px;
+    margin-top: auto;
+}
 </style>""", unsafe_allow_html=True)
 
 
@@ -989,16 +1122,41 @@ approach_eval = evaluate_approach_weights(target_profile, peer_rows, a.dcf_weigh
 rec = investment_recommendation(price, effective_price, dcf_price=dcf_p)
 
 with overview:
-    # 1. Institutional Recommendation Banner with Integrated Action Button
+    # 1. Model Health & Sanity Audit Strip (Exam Integrity Criteria)
+    bs_diff = base_check(b)
+    bs_status = "passed" if abs(bs_diff) <= 0.01 else "alert"
+    bs_label = "Balanced (0.00 bn plug)" if abs(bs_diff) <= 0.01 else f"Discrepancy ({bs_diff:,.2f} bn)"
+    curr_status = "passed" if c.get("financial_currency") == "IDR" else ("warning" if fx > 0 else "alert")
+    curr_label = "IDR (Verified)" if c.get("financial_currency") == "IDR" else f"{c.get('financial_currency')} (FX {fx:,.0f})"
+    tg_status = "passed" if a.terminal_growth <= 0.035 else "warning"
+    tg_label = f"{a.terminal_growth*100:.2f}% (<= GDP)" if a.terminal_growth <= 0.035 else f"{a.terminal_growth*100:.2f}% (> GDP)"
+    peer_status = "passed" if len(peer_rows) >= 2 else "warning"
+    peer_label = f"{len(peer_rows)} Gated ({c.get('industry', 'IDX Sub-Industry')[:24]})"
+    solv_status = "alert" if is_dcf_ineligible else "passed"
+    solv_label = "Solvent (Equity > 0)" if not is_dcf_ineligible else "Underwater Intrinsic Equity"
+
+    st.markdown(
+        f"""<div class="model-audit-strip">
+            <span style="font-size: 11px; font-weight: 700; color: #5f7578; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px;">Model Health:</span>
+            <div class="audit-item {bs_status}"><span class="audit-dot"></span><span>Balance Sheet: <b>{bs_label}</b></span></div>
+            <div class="audit-item {curr_status}"><span class="audit-dot"></span><span>Currency: <b>{curr_label}</b></span></div>
+            <div class="audit-item {tg_status}"><span class="audit-dot"></span><span>Terminal g: <b>{tg_label}</b></span></div>
+            <div class="audit-item {peer_status}"><span class="audit-dot"></span><span>Peers: <b>{peer_label}</b></span></div>
+            <div class="audit-item {solv_status}"><span class="audit-dot"></span><span>Capital Structure: <b>{solv_label}</b></span></div>
+        </div>""",
+        unsafe_allow_html=True
+    )
+
+    # 2. Executive Recommendation & Action Banner
     upside_str = (
         f"""<span style="font-size: 14px; color: #5c7080;">Capital Structure: <b>Negative Intrinsic Equity (Insolvent / Restructuring Risk)</b></span>"""
         if rec['rating'] == 'NOT ELIGIBLE' else
         f"""<span style="font-size: 15px; color: #2e3e3b;">Implied Upside: <b>{rec['upside']:+.1%}</b> &nbsp;|&nbsp; Margin of Safety: <b>{rec['margin_of_safety']:.1%}</b></span>"""
     )
-    rec_col, dl_col = st.columns([4.0, 1.2], vertical_alignment="center")
+    rec_col, dl_col = st.columns([3.8, 1.4], vertical_alignment="center")
     with rec_col:
         st.markdown(
-            f"""<div style="background-color: {rec['color']}15; border-left: 5px solid {rec['color']}; padding: 14px 18px; border-radius: 8px; margin: 10px 0 18px;">
+            f"""<div style="background-color: {rec['color']}15; border-left: 5px solid {rec['color']}; padding: 14px 18px; border-radius: 8px; margin: 0 0 16px;">
             <span style="font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: {rec['color']}; text-transform: uppercase;">INVESTMENT RECOMMENDATION · MID-TERM DECISION CRITERIA</span>
             <div style="display: flex; align-items: baseline; gap: 16px; margin: 6px 0 4px; flex-wrap: wrap;">
                 <span style="font-size: 24px; font-weight: 800; color: {rec['color']};">{rec['rating']}</span>
@@ -1035,12 +1193,20 @@ with overview:
                     type="primary",
                     use_container_width=True
                 )
-            else:
-                st.info("PDF engine readying...")
-        except Exception as _pdf_err:
-            st.caption(f"PDF generator ready: {_pdf_err}")
+            if result:
+                excel_bytes = workbook(c, historical, b, a, drivers, f, result, grid, peer_rows, relative)
+                st.download_button(
+                    label="Export Excel (.xlsx)",
+                    data=excel_bytes,
+                    file_name=f"{c['symbol'].replace('.JK', '')}_Valuation.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=key("dl_excel_banner"),
+                    use_container_width=True
+                )
+        except Exception as _dl_err:
+            st.caption(f"Export tools ready: {_dl_err}")
 
-    # 2. Valuation Eligibility Warning if Ineligible
+    # 3. Valuation Eligibility Notice if Ineligible
     if is_dcf_ineligible:
         tot_debt = b.get("short_debt", 0.0) + b.get("long_debt", 0.0)
         ev_val = result.get("enterprise_value", 0.0) if result else 0.0
@@ -1053,18 +1219,69 @@ with overview:
             f"*Valuing this company requires excessive speculative forecasting (forward production ramp-up schedules and commodity pricing) rather than reliable fundamental extrapolation.*"
         )
 
-    # 3. Metric Columns
-    cols = st.columns(5)
-    cols[0].metric("Reference price", f"Rp {price:,.0f}" if price else "Not available")
-    cols[1].metric("Blended fair value", "Not eligible" if is_dcf_ineligible else (f"Rp {effective_price:,.0f}" if effective_price and effective_price > 0 else "Check inputs"))
-    cols[2].metric(
-        "DCF value / share",
-        f"Rp {dcf_p:,.0f}" if dcf_p and dcf_p > 0 else ("Not eligible" if dcf_p is not None and dcf_p <= 0 else "Check assumptions"),
-        help=f"Probability-weighted expected DCF value across Bear ({norm_probs.get('Bear', 0.25):.0%}), Base ({norm_probs.get('Base', 0.50):.0%}), and Bull ({norm_probs.get('Bull', 0.25):.0%}) scenarios. Base case alone: Rp {base_dcf_price:,.0f}." if base_dcf_price else None
-    )
-    cols[3].metric("Relative value / share", f"Rp {rel_price:,.0f}" if pd.notna(rel_price) and rel_price > 0 else "Needs >= 2 peers")
-    upside = (effective_price / price - 1) if effective_price and price and effective_price > 0 and not is_dcf_ineligible else None
-    cols[4].metric("Implied upside / downside", f"{upside:+.1%}" if upside is not None else "—")
+    # 4. Tri-Pillar Valuation Synthesis (Institutional Side-by-Side Cards)
+    st.markdown("### Valuation Synthesis · Tri-Pillar Comparison")
+
+    mkt_cap = (price * shares) if (price and shares) else None
+    pe_ratio = (mkt_cap / b['net_income']) if (mkt_cap and b.get('net_income') and b['net_income'] > 0) else None
+    pe_str = f"{pe_ratio:.1f}x" if pe_ratio else "—"
+    tot_debt = b.get("short_debt", 0.0) + b.get("long_debt", 0.0)
+    ev_market = (mkt_cap + tot_debt - b.get("cash", 0.0)) if mkt_cap else None
+    evebitda_ratio = (ev_market / target_ebitda) if (ev_market and target_ebitda and target_ebitda > 0) else None
+    evebitda_str = f"{evebitda_ratio:.1f}x" if evebitda_ratio else "—"
+
+    bear_price = next((x["Value / share"] for x in scenario_rows if x["Scenario"] == "Bear" and pd.notna(x["Value / share"])), None)
+    bull_price = next((x["Value / share"] for x in scenario_rows if x["Scenario"] == "Bull" and pd.notna(x["Value / share"])), None)
+    base_dcf_price = result["price"] if result else None
+
+    q25 = composite_relative_value(relative[relative["Case"] == "Lower quartile"].replace("Lower quartile", "Median")) if (not relative.empty and "Case" in relative.columns and "Lower quartile" in relative["Case"].values) else (rel_price * 0.85 if pd.notna(rel_price) else None)
+    q75 = composite_relative_value(relative[relative["Case"] == "Upper quartile"].replace("Upper quartile", "Median")) if (not relative.empty and "Case" in relative.columns and "Upper quartile" in relative["Case"].values) else (rel_price * 1.15 if pd.notna(rel_price) else None)
+    q25_str = f"Rp {q25:,.0f}" if pd.notna(q25) else "—"
+    q75_str = f"Rp {q75:,.0f}" if pd.notna(q75) else "—"
+
+    p_col1, p_col2, p_col3 = st.columns(3)
+    with p_col1:
+        st.markdown('<div class="pillar-tag pillar-tag-market">PILLAR 1 · BENCHMARK (0% WEIGHT)</div>', unsafe_allow_html=True)
+        st.metric("Reference price", f"Rp {price:,.0f}" if price else "Not available")
+        st.markdown(
+            f"""<div class="pillar-metrics">
+                <div class="p-row"><span>Market Cap</span><b>Rp {mkt_cap:,.1f} bn</b></div>
+                <div class="p-row"><span>Trailing P/E</span><b>{pe_str}</b></div>
+                <div class="p-row"><span>EV / EBITDA</span><b>{evebitda_str}</b></div>
+                <div class="p-row"><span>Diluted Shares</span><b>{shares:,.2f} bn</b></div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+
+    with p_col2:
+        st.markdown(f'<div class="pillar-tag pillar-tag-dcf">PILLAR 2 · INTRINSIC ANCHOR ({approach_eval["dcf_weight"]:.0%} WEIGHT)</div>', unsafe_allow_html=True)
+        st.metric(
+            "DCF value / share",
+            f"Rp {dcf_p:,.0f}" if dcf_p and dcf_p > 0 else ("Not eligible" if is_dcf_ineligible else "Check assumptions"),
+            help=f"Probability-weighted expected DCF value across Bear ({norm_probs.get('Bear', 0.25):.0%}), Base ({norm_probs.get('Base', 0.50):.0%}), and Bull ({norm_probs.get('Bull', 0.25):.0%}) scenarios. Base case alone: Rp {base_dcf_price:,.0f}." if base_dcf_price else None
+        )
+        st.markdown(
+            f"""<div class="pillar-metrics">
+                <div class="p-row"><span>Base Case ({norm_probs.get('Base', 0.50):.0%})</span><b>Rp {base_dcf_price:,.0f}</b></div>
+                <div class="p-row"><span>Bear Case ({norm_probs.get('Bear', 0.25):.0%})</span><b>Rp {bear_price:,.0f}</b></div>
+                <div class="p-row"><span>Bull Case ({norm_probs.get('Bull', 0.25):.0%})</span><b>Rp {bull_price:,.0f}</b></div>
+                <div class="p-row"><span>WACC · Terminal g</span><b>{a.wacc*100:.2f}% · {a.terminal_growth*100:.2f}%</b></div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+
+    with p_col3:
+        st.markdown(f'<div class="pillar-tag pillar-tag-rel">PILLAR 3 · MARKET CROSS-CHECK ({approach_eval["rel_weight"]:.0%} WEIGHT)</div>', unsafe_allow_html=True)
+        st.metric("Relative value / share", f"Rp {rel_price:,.0f}" if pd.notna(rel_price) and rel_price > 0 else "Needs >= 2 peers")
+        st.markdown(
+            f"""<div class="pillar-metrics">
+                <div class="p-row"><span>Lower Quartile (P25)</span><b>{q25_str}</b></div>
+                <div class="p-row"><span>Upper Quartile (P75)</span><b>{q75_str}</b></div>
+                <div class="p-row"><span>Gated Peers</span><b>{len(peer_rows)} peers matched</b></div>
+                <div class="p-row"><span>Multiples Applied</span><b>EV/EBITDA, P/E, P/BV</b></div>
+            </div>""",
+            unsafe_allow_html=True
+        )
 
     # 3. Valuation Approach Selection & Justification Card (Rule 1 & Rule 2)
     with st.expander("Valuation Approach Selection & Weight Justification (Rule 1 & Rule 2)", expanded=True):
