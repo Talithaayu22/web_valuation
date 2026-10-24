@@ -1476,11 +1476,12 @@ with peers_tab:
                 unsafe_allow_html=True
             )
 
-    # Multiples distribution table
+    # Multiples distribution table filtered by chosen aggregator
     if not relative.empty:
-        st.markdown("**Detailed Multiples Distribution (Lower Quartile, Median, Harmonic Mean, Upper Quartile)**")
+        filtered_relative = relative[relative["Case"] == sel_agg] if "Case" in relative.columns else relative
+        st.markdown(f"**Multiples Benchmark & Implied Value ({sel_agg})**")
         st.dataframe(
-            relative,
+            filtered_relative,
             hide_index=True,
             width="stretch",
             column_config={
