@@ -398,8 +398,14 @@ with assumptions_tab:
             pct("Growth · years 1–3 (%)", "growth", -50, 100)
             st.caption(f"Anchored to audited 3-year historical revenue CAGR ({initial.growth:.1%}). Fades across years 4–5 into year 5 mature growth.")
             pct("Growth · year 5 (%)", "mature_growth", -50, 50)
-            pct("EBIT margin · years 1–3 (%)", "ebit_margin", -50, 80)
-            pct("EBIT margin · year 5 (%)", "mature_margin", -50, 80)
+            pct(
+                "EBIT margin · years 1–3 (%)", "ebit_margin", -50, 80,
+                help="Operating profit margin before interest and taxes: EBIT / Revenue. Represents core business operating profitability. Inferred baseline is derived from the latest audited annual statement."
+            )
+            pct(
+                "EBIT margin · year 5 (%)", "mature_margin", -50, 80,
+                help="Target operating margin at Year 5. In Year 4, the model smoothly transitions (2/3 initial + 1/3 mature) toward this steady-state level, reflecting long-term competitive convergence or margin expansion."
+            )
             pct(
                 "Gross margin (%)", "gross_margin", 1, 100,
                 help="Direct operating profitability after Cost of Goods Sold (COGS): (Revenue - COGS) / Revenue. In this model, cash OpEx is dynamically derived as the residual (Revenue - COGS - D&A - EBIT). Higher gross margin expands operating cushion."
