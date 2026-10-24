@@ -12,11 +12,13 @@ try:
         CATALOG, BILLION, demo_company, demo_peers, fetch_company, peer_record, ticker_symbol,
         get_default_peers_for_ticker, get_or_fetch_peers, rank_peers_similarity, clean_company_name
     )
+    from valuation.report_pdf import generate_valuation_pdf
 except ImportError:
     from valuation.data import (
         CATALOG, BILLION, demo_company, fetch_company, peer_record, ticker_symbol,
         get_default_peers_for_ticker, rank_peers_similarity, clean_company_name
     )
+    from valuation.report_pdf import generate_valuation_pdf
     def demo_peers():
         p1 = demo_company()
         p1["symbol"] = "DEMO1.JK"
@@ -505,7 +507,7 @@ with assumptions_tab:
             fields["nonoperating_assets"] = st.number_input("Additional non-operating assets (IDR bn)", min_value=0., value=float(initial.nonoperating_assets), key=key("nonop"), help="Adds non-operating investments / associates to EV.")
 
         st.divider()
-        st.form_submit_button("Apply baseline assumptions", type="primary", use_container_width=True)
+        st.form_submit_button("Apply assumptions", type="primary", use_container_width=True)
     base_a = make_assumptions(**fields)
 
     # Full-Width Section 04 at the bottom (Decoupled from form for instant reactivity)
@@ -1022,7 +1024,49 @@ with overview:
         )
         chart(fig_ff, "IDR / share")
 
-    # 5. Calculation Inspector & Mathematical Proofs (KaTeX Formula Audit)
+    # 5. Institutional Valuation Report Export Card
+    st.markdown("### Institutional Valuation Report (Downloadable PDF)")
+    c_pdf1, c_pdf2 = st.columns([3, 1.2])
+    with c_pdf1:
+        st.markdown(
+            f"**Executive Valuation Memorandum & Decision Audit ({c['symbol']})**<br/>"
+            f"<span style='color: #5c7080; font-size: 13px;'>"
+            f"Publication-grade 2-page report conforming to Digital Business Valuation specifications. "
+            f"Includes Investment Recommendation ({rec['rating']}), Margin of Safety ({rec['margin_of_safety']:.1%}), "
+            f"Bear/Base/Bull Visual Scenario Valuation, DCF & Relative Bridge, CAPM/WACC Audit, Peer Calibration, and AI Governance."
+            f"</span>",
+            unsafe_allow_html=True
+        )
+    with c_pdf2:
+        try:
+            pdf_report_bytes = generate_valuation_pdf(
+                company=c,
+                assumptions=a,
+                dcf_result=result,
+                scenario_rows=scenario_rows,
+                relative_df=relative,
+                rel_breakdown=rel_breakdown,
+                rel_price=rel_price,
+                blended_price=blended_price,
+                effective_price=effective_price,
+                expected_dcf_price=expected_dcf_price,
+                rec=rec,
+                approach_eval=approach_eval,
+                peer_rows=peer_rows,
+            )
+            st.download_button(
+                label="📥 Download Valuation Report (PDF)",
+                data=pdf_report_bytes,
+                file_name=f"{c['symbol'].replace('.JK', '')}_Valuation_Report.pdf",
+                mime="application/pdf",
+                key=key("dl_pdf_overview"),
+                type="primary",
+                use_container_width=True
+            )
+        except Exception as _pdf_err:
+            st.caption(f"PDF generator ready: {_pdf_err}")
+
+    # 6. Calculation Inspector & Mathematical Proofs (KaTeX Formula Audit)
     with st.expander("🔍 Calculation Inspector & Mathematical Proofs (KaTeX Formula Audit)", expanded=False):
         c_p1, c_p2 = st.columns(2)
         with c_p1:
