@@ -472,11 +472,11 @@ with assumptions_tab:
             st.markdown("#### 02 · Macro & WACC")
             st.caption("Damodaran ERP, Indonesia CRP, JKSE regression beta, and capital structure.")
             pct(
-                "Risk-free rate (IndoGov 10Y FR @ Dec 31, 2025) (%)", "risk_free", 0, 30,
+                "Risk-free rate (%)", "risk_free", 0, 30,
                 help="Indonesian 10-Year Government Benchmark Bond yield (FR series) as of Dec 31, 2025 (6.64%). Sovereign baseline risk-free rate used in CAPM."
             )
             pct(
-                "Mature market ERP (Damodaran NYU Stern) (%)", "mature_equity_premium", 0, 20,
+                "Mature market ERP (%)", "mature_equity_premium", 0, 20,
                 help="Damodaran published NYU Stern mature equity risk premium (4.60%). Baseline equity risk compensation for mature markets (S&P 500 baseline)."
             )
             m_erp = fields.get("mature_equity_premium", initial.mature_equity_premium)
@@ -509,7 +509,7 @@ with assumptions_tab:
             hist_roic_val = compute_historical_roic(historical, b, tax_rate=initial.tax_rate)
             reinv_terminal = (initial.terminal_growth / initial.terminal_roic) if initial.terminal_roic > 0 else 0.0
             pct(
-                "Terminal return on invested capital (%)", "terminal_roic", .1, 100,
+                "Terminal ROIC (%)", "terminal_roic", .1, 100,
                 help=(
                     f"Calibrated from audited historical median ROIC ({hist_roic_val*100:.1f}%) fading to {initial.terminal_roic*100:.1f}% "
                     f"below median as growth decelerates to perpetuity (WACC {initial.wacc*100:.1f}%). "
