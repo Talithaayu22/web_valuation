@@ -77,6 +77,22 @@ class Assumptions:
     bear_reinvest_shift: float = 0.010
     bull_reinvest_shift: float = -0.010
 
+    # Scenario Probabilities (Institutionally Governed: Bear 20-25%, Base 50-60%, Bull 20-25%)
+    prob_bear: float = 0.25
+    prob_base: float = 0.50
+    prob_bull: float = 0.25
+
+    def normalized_scenario_probabilities(self) -> dict[str, float]:
+        """Returns normalized probabilities for Bear, Base, and Bull scenarios summing to 1.0."""
+        total = self.prob_bear + self.prob_base + self.prob_bull
+        if total <= 0:
+            return {"Bear": 0.25, "Base": 0.50, "Bull": 0.25}
+        return {
+            "Bear": self.prob_bear / total,
+            "Base": self.prob_base / total,
+            "Bull": self.prob_bull / total,
+        }
+
     @property
     def total_equity_premium(self):
         return self.mature_equity_premium + self.country_risk_premium

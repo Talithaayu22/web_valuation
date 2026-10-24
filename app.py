@@ -507,8 +507,50 @@ with assumptions_tab:
         st.divider()
         st.markdown('<div id="section-04-scenario-modeling"></div>', unsafe_allow_html=True)
         st.markdown("#### 04 · Scenario modeling & stress testing")
-        st.caption("Simulates macroeconomic and operational regimes across Bear, Base, and Bull cases. Deviations are applied directly to each driver relative to the company baseline.")
+        st.caption("Simulates macroeconomic and operational regimes across Bear, Base, and Bull cases. Deviations and probabilities are governed by institutional framework rules.")
         fields["scenario_mode"] = "Coherent Macro & Operating World"
+
+        # Scenario Probabilities
+        st.markdown("##### Scenario Probability Weighting")
+        st.caption("Institutional rule ranges: Base Case (50%–60%), Bull Case (20%–25%), Bear Case (20%–25%). Total allocation must equal 100.0%.")
+
+        p_col1, p_col2, p_col3, p_col4 = st.columns([1, 1, 1, 1])
+        with p_col1:
+            p_bear_def = float(saved.get("prob_bear", getattr(initial, "prob_bear", 0.25)) * 100)
+            p_bear_val = st.number_input(
+                "Bear probability (%)",
+                min_value=20.0, max_value=25.0, value=p_bear_def, step=0.5,
+                key=key("prob_bear"),
+                help="Probability allocated to Bear downturn scenario (governed range: 20.0% – 25.0%). Default 25.0%."
+            )
+            fields["prob_bear"] = p_bear_val / 100.0
+
+        with p_col2:
+            p_base_def = float(saved.get("prob_base", getattr(initial, "prob_base", 0.50)) * 100)
+            p_base_val = st.number_input(
+                "Base probability (%)",
+                min_value=50.0, max_value=60.0, value=p_base_def, step=0.5,
+                key=key("prob_base"),
+                help="Probability allocated to Base consensus scenario (governed range: 50.0% – 60.0%). Default 50.0%."
+            )
+            fields["prob_base"] = p_base_val / 100.0
+
+        with p_col3:
+            p_bull_def = float(saved.get("prob_bull", getattr(initial, "prob_bull", 0.25)) * 100)
+            p_bull_val = st.number_input(
+                "Bull probability (%)",
+                min_value=20.0, max_value=25.0, value=p_bull_def, step=0.5,
+                key=key("prob_bull"),
+                help="Probability allocated to Bull expansion scenario (governed range: 20.0% – 25.0%). Default 25.0%."
+            )
+            fields["prob_bull"] = p_bull_val / 100.0
+
+        total_prob = p_bear_val + p_base_val + p_bull_val
+        with p_col4:
+            st.metric("Total Probability", f"{total_prob:.1f}%")
+
+        if not math.isclose(total_prob, 100.0, abs_tol=0.01):
+            st.warning(f"Total probability is {total_prob:.1f}%. It must sum to exactly 100.0% for accurate expected value weighting.")
 
         with st.expander("Scenario Calibration (Bear & Bull Deviations)", expanded=True):
             st.caption("Customize specific deviations for Bull and Bear scenarios across operating, macro discount, and reinvestment drivers.")
@@ -673,6 +715,7 @@ base_dcf_price = result["price"] if result and pd.notna(result.get("price")) els
 scenario_configs = [
     {
         "label": "Bear",
+        "prob": getattr(a, "prob_bear", 0.25),
         "growth_shift": getattr(a, "bear_growth_shift", -0.02),
         "margin_shift": getattr(a, "bear_margin_shift", -0.02),
         "wacc_shift": getattr(a, "bear_wacc_shift", 0.005),
@@ -682,6 +725,7 @@ scenario_configs = [
     },
     {
         "label": "Base",
+        "prob": getattr(a, "prob_base", 0.50),
         "growth_shift": 0.0,
         "margin_shift": 0.0,
         "wacc_shift": 0.0,
@@ -691,6 +735,7 @@ scenario_configs = [
     },
     {
         "label": "Bull",
+        "prob": getattr(a, "prob_bull", 0.25),
         "growth_shift": getattr(a, "bull_growth_shift", 0.02),
         "margin_shift": getattr(a, "bull_margin_shift", 0.02),
         "wacc_shift": getattr(a, "bull_wacc_shift", -0.005),
@@ -730,6 +775,7 @@ for cfg in scenario_configs:
         upside = ((scen_price / base_dcf_price) - 1.0) if (base_dcf_price and base_dcf_price > 0 and pd.notna(scen_price)) else 0.0
         row_dict = {
             "Scenario": label,
+            "Probability": cfg["prob"],
             "Value / share": scen_price,
             "Upside / Downside": f"{upside:+.1%}" if label != "Base" else "Base case",
             "Year 5 revenue": sf.iloc[-1].revenue,
@@ -1067,6 +1113,7 @@ with dcf_tab:
         st.markdown("#### Scenario analysis · Bear / Base / Bull")
         scen_df = pd.DataFrame(scenario_rows).set_index("Scenario")
         format_dict = {
+            "Probability": "{:.1%}",
             "Value / share": "Rp {:,.2f}",
             "Year 5 revenue": "IDR {:,.1f} bn",
             "Year 5 EBIT": "IDR {:,.1f} bn",
@@ -1078,6 +1125,36 @@ with dcf_tab:
             format_dict["Terminal ROIC"] = "{:.2%}"
 
         st.dataframe(scen_df.style.format(format_dict, na_rep="—"), width="stretch")
+
+        # Probability-Weighted Expected DCF Fair Value Summary Card
+        norm_probs = a.normalized_scenario_probabilities()
+        prices_by_scenario = {r["Scenario"]: r["Value / share"] for r in scenario_rows if pd.notna(r.get("Value / share"))}
+        if len(prices_by_scenario) == 3 and base_dcf_price and base_dcf_price > 0:
+            expected_dcf_price = sum(prices_by_scenario[scen] * norm_probs.get(scen, 0.0) for scen in ["Bear", "Base", "Bull"])
+            exp_col1, exp_col2, exp_col3 = st.columns(3)
+            with exp_col1:
+                st.metric(
+                    "Expected DCF Value (Probability-Weighted)",
+                    f"Rp {expected_dcf_price:,.2f}",
+                    help=f"Weighted average across Bear ({norm_probs['Bear']:.1%}), Base ({norm_probs['Base']:.1%}), and Bull ({norm_probs['Bull']:.1%}) regimes."
+                )
+            with exp_col2:
+                diff_base = ((expected_dcf_price / base_dcf_price) - 1.0)
+                st.metric(
+                    "Delta vs Base DCF",
+                    f"{diff_base:+.2%}",
+                    help=f"Variance between probability-weighted expected DCF (Rp {expected_dcf_price:,.2f}) and deterministic Base Case (Rp {base_dcf_price:,.2f})."
+                )
+            with exp_col3:
+                market_p = c.get("price")
+                if market_p and market_p > 0:
+                    exp_upside = ((expected_dcf_price / market_p) - 1.0)
+                    st.metric(
+                        "Expected Upside / Downside vs Market",
+                        f"{exp_upside:+.1%}",
+                        help=f"Expected upside or downside of probability-weighted intrinsic value vs current market price (Rp {market_p:,.2f})."
+                    )
+
         st.button("Edit scenario drivers", key="btn_edit_scenario_drivers")
         components.html(
             """

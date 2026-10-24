@@ -751,3 +751,40 @@ def test_scenario_modeling_modes_and_parameters(case):
 
     # Macro Bear must reflect lower valuation than purely operational Bear due to discount rate expansion
     assert r_bear_macro["price"] < r_bear_op["price"] < p_base
+
+
+def test_scenario_probabilities_and_expected_value():
+    """Verify governed scenario probabilities, normalization, and expected value calculation."""
+    # 1. Default probabilities
+    a = Assumptions()
+    assert a.prob_bear == 0.25
+    assert a.prob_base == 0.50
+    assert a.prob_bull == 0.25
+    probs = a.normalized_scenario_probabilities()
+    assert probs["Bear"] == 0.25
+    assert probs["Base"] == 0.50
+    assert probs["Bull"] == 0.25
+    assert sum(probs.values()) == 1.0
+
+    # 2. Institutional range compliance (Base 50-60%, Bull 20-25%, Bear 20-25%)
+    a_custom = Assumptions(prob_bear=0.20, prob_base=0.60, prob_bull=0.20)
+    assert 0.20 <= a_custom.prob_bear <= 0.25
+    assert 0.50 <= a_custom.prob_base <= 0.60
+    assert 0.20 <= a_custom.prob_bull <= 0.25
+    probs_custom = a_custom.normalized_scenario_probabilities()
+    assert probs_custom["Bear"] == 0.20
+    assert probs_custom["Base"] == 0.60
+    assert probs_custom["Bull"] == 0.20
+    assert sum(probs_custom.values()) == 1.0
+
+    # 3. Normalization safeguard if raw inputs slightly deviate
+    a_deviant = Assumptions(prob_bear=0.25, prob_base=0.60, prob_bull=0.25) # sum = 1.10
+    norm = a_deviant.normalized_scenario_probabilities()
+    assert abs(sum(norm.values()) - 1.0) < 1e-9
+    assert abs(norm["Base"] - (0.60 / 1.10)) < 1e-9
+
+    # 4. Expected value calculation
+    prices = {"Bear": 1800.0, "Base": 2500.0, "Bull": 3400.0}
+    expected_default = sum(prices[s] * probs[s] for s in prices)
+    assert expected_default == (1800 * 0.25) + (2500 * 0.50) + (3400 * 0.25)
+    assert expected_default == 2550.0
