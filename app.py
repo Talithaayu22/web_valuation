@@ -887,13 +887,6 @@ with peers_tab:
         chart_bars = []
         bar_colors = []
         bar_labels = []
-        for m_name in metric_order:
-            m_info = rel_breakdown.get(m_name, {})
-            p_val = m_info.get("implied_price")
-            if pd.notna(p_val) and m_info.get("eligible", False):
-                chart_bars.append(p_val)
-                bar_labels.append(m_name)
-                bar_colors.append("#2e7d32")
 
         if pd.notna(rel_price):
             chart_bars.append(rel_price)
@@ -918,27 +911,6 @@ with peers_tab:
             textposition="auto"
         ))
         chart(fig_rv, "IDR / share")
-
-    # 5. DUAL-METHOD TRIANGULATION & RECOMMENDATION
-    st.divider()
-    st.markdown("#### 3. Dual-Method Triangulation & Investment Recommendation")
-    c_dcf, c_rel, c_blended = st.columns(3)
-    c_dcf.metric(f"DCF Fair Value ({a.dcf_weight:.0%} weight)", f"Rp {dcf_p:,.0f}" if dcf_p else "—")
-    c_rel.metric(f"Composite Relative Value ({a.relative_weight:.0%} weight)", f"Rp {rel_price:,.0f}" if pd.notna(rel_price) else "—")
-    c_blended.metric("Blended Fair Value / Share", f"Rp {blended_price:,.0f}" if pd.notna(blended_price) else "—")
-
-    # Summary recommendation card
-    st.markdown(
-        f"""<div style="background-color: {rec['color']}15; border-left: 5px solid {rec['color']}; padding: 14px 18px; border-radius: 8px; margin: 12px 0;">
-        <span style="font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: {rec['color']}; text-transform: uppercase;">INVESTMENT RECOMMENDATION · MID-TERM DECISION CRITERIA</span>
-        <div style="display: flex; align-items: baseline; gap: 16px; margin: 6px 0 4px;">
-            <span style="font-size: 24px; font-weight: 800; color: {rec['color']};">{rec['rating']}</span>
-            <span style="font-size: 15px; color: #2e3e3b;">Implied Upside: <b>{rec['upside']:+.1%}</b> &nbsp;|&nbsp; Margin of Safety: <b>{rec['margin_of_safety']:.1%}</b></span>
-        </div>
-        <div style="font-size: 13px; color: #435451;">{rec['summary']}</div>
-        </div>""",
-        unsafe_allow_html=True
-    )
 
 with st.sidebar:
     st.divider()
