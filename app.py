@@ -496,8 +496,22 @@ with assumptions_tab:
                 "Target debt / capital (%)", "debt_weight", 0, 95,
                 help="Target capital structure debt weight (D / (D + E)). Inferred from latest balance sheet book debt vs market capitalization."
             )
-            override = st.checkbox("Override calculated WACC", value=initial.wacc_override is not None, key=key("override"))
-            custom_wacc = st.number_input("WACC override (%)", min_value=.1, max_value=60., value=float((initial.wacc_override or initial.wacc) * 100), step=.25, key=key("custom_wacc"))
+            override = st.checkbox(
+                "Override calculated WACC",
+                value=initial.wacc_override is not None,
+                key=key("override"),
+                help="By default, WACC is automatically calculated from market risk, beta, and debt costs. Check this box if you want to bypass the formula and manually type your own discount rate (e.g. an internal 12% fund hurdle rate)."
+            )
+            custom_wacc = st.number_input(
+                "WACC override (%)",
+                min_value=.1,
+                max_value=60.,
+                value=float((initial.wacc_override or initial.wacc) * 100),
+                step=.25,
+                key=key("custom_wacc"),
+                disabled=not override,
+                help="Custom discount rate applied to the DCF valuation when the override box above is checked."
+            )
             fields["wacc_override"] = custom_wacc / 100 if override else None
 
         with col_policy:
