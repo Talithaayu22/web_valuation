@@ -393,9 +393,14 @@ with assumptions_tab:
         with col_op:
             st.markdown("#### 01 · Operating model")
             st.caption("Revenue growth, operating margins, reinvestment, and capital intensity.")
-            pct("Growth · years 1–3 (%)", "growth", -50, 100)
-            st.caption(f"Anchored to audited 3-year historical revenue CAGR ({initial.growth:.1%}). Fades across years 4–5 into year 5 mature growth.")
-            pct("Growth · year 5 (%)", "mature_growth", -50, 50)
+            pct(
+                "Growth · years 1–3 (%)", "growth", -50, 100,
+                help=f"Anchored to audited 3-year historical revenue CAGR ({initial.growth:.1%}). In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth."
+            )
+            pct(
+                "Growth · year 5 (%)", "mature_growth", -50, 50,
+                help="Target steady-state revenue growth rate at Year 5. In Year 4, growth smoothly transitions (2/3 initial + 1/3 mature) toward this level, reflecting competitive fade toward long-term GDP growth."
+            )
             pct(
                 "EBIT margin · years 1–3 (%)", "ebit_margin", -50, 80,
                 help="Operating profit margin before interest and taxes: EBIT / Revenue. Represents core business operating profitability. Inferred baseline is derived from the latest audited annual statement."
@@ -422,10 +427,12 @@ with assumptions_tab:
             )
             pct(
                 "Non-cash working capital / revenue (%)", "nwc_pct", -50, 80,
-                help="Damodaran Non-Cash Working Capital ratio: ((AR + Inventory + Other CA) - (AP + Other CL)) / Revenue. Measures operational liquidity tied up in the business. Negative NWC reflects a supplier-financed business model (e.g. retailers, telecom)."
+                help="Damodaran Non-Cash Working Capital ratio: ((AR + Inventory + Other CA) - (AP + Other CL)) / Revenue. Measures operational liquidity tied up in the business. Working capital is driven by non-cash NWC % of revenue instead of turnover days."
             )
-            st.caption("Damodaran standard: working capital is driven by non-cash NWC % of revenue instead of turnover days.")
-            pct("Minimum cash / revenue (%)", "minimum_cash_pct", 0, 100)
+            pct(
+                "Minimum cash / revenue (%)", "minimum_cash_pct", 0, 100,
+                help="Minimum operational liquidity cushion required for day-to-day operations (default 2.0% of revenue). Shortfalls below this floor trigger liquidity revolver financing in the cash flow roll-forward."
+            )
 
             # Preserve background cash roll-forward fields
             fields["ar_days"] = float(initial.ar_days)
@@ -439,16 +446,30 @@ with assumptions_tab:
         with col_macro:
             st.markdown("#### 02 · Macro & WACC")
             st.caption("Damodaran ERP, Indonesia CRP, JKSE regression beta, and capital structure.")
-            pct("Risk-free rate (IndoGov 10Y FR @ Dec 31, 2025) (%)", "risk_free", 0, 30)
-            pct("Mature market ERP (Damodaran NYU Stern) (%)", "mature_equity_premium", 0, 20)
-            pct("Indonesia country risk premium (CRP) (%)", "country_risk_premium", 0, 20)
+            pct(
+                "Risk-free rate (IndoGov 10Y FR @ Dec 31, 2025) (%)", "risk_free", 0, 30,
+                help="Indonesian 10-Year Government Benchmark Bond yield (FR series) as of Dec 31, 2025 (6.64%). Sovereign baseline risk-free rate used in CAPM."
+            )
+            pct(
+                "Mature market ERP (Damodaran NYU Stern) (%)", "mature_equity_premium", 0, 20,
+                help="Damodaran published NYU Stern mature equity risk premium (4.60%). Baseline equity risk compensation for mature markets (S&P 500 baseline)."
+            )
             m_erp = fields.get("mature_equity_premium", initial.mature_equity_premium)
             c_crp = fields.get("country_risk_premium", initial.country_risk_premium)
-            st.caption(f"**Total Indonesia ERP**: {((m_erp + c_crp) * 100):.2f}% (Mature Base {m_erp*100:.2f}% + CRP {c_crp*100:.2f}%)")
+            pct(
+                "Indonesia country risk premium (CRP) (%)", "country_risk_premium", 0, 20,
+                help=f"Damodaran published Indonesia Country Risk Premium ({c_crp*100:.2f}%), based on sovereign rating (Baa2/BBB) and relative equity volatility. Total Indonesia ERP = Mature ERP ({m_erp*100:.2f}%) + CRP ({c_crp*100:.2f}%) = {((m_erp + c_crp)*100):.2f}%."
+            )
             fields["equity_premium"] = fields["mature_equity_premium"]
             fields["beta"] = st.number_input("Levered beta", min_value=-2.0, max_value=4., value=float(initial.beta), step=.05, key=key("beta"), help="Derived from 5Y monthly regression vs ^JKSE with Blume mean-reversion adjustment.")
-            pct("Pre-tax borrowing cost (%)", "debt_rate", 0, 50)
-            pct("Target debt / capital (%)", "debt_weight", 0, 95)
+            pct(
+                "Pre-tax borrowing cost (%)", "debt_rate", 0, 50,
+                help="Effective pre-tax debt borrowing rate (Kd = Interest Expense / Total Debt). Reflects weighted average coupon rate on commercial bank borrowings and corporate bonds."
+            )
+            pct(
+                "Target debt / capital (%)", "debt_weight", 0, 95,
+                help="Target capital structure debt weight (D / (D + E)). Inferred from latest balance sheet book debt vs market capitalization."
+            )
             override = st.checkbox("Override calculated WACC", value=initial.wacc_override is not None, key=key("override"))
             custom_wacc = st.number_input("WACC override (%)", min_value=.1, max_value=60., value=float((initial.wacc_override or initial.wacc) * 100), step=.25, key=key("custom_wacc"))
             fields["wacc_override"] = custom_wacc / 100 if override else None
@@ -456,18 +477,28 @@ with assumptions_tab:
         with col_policy:
             st.markdown("#### 03 · Valuation policy")
             st.caption("Multi-approach weighting, terminal parameters, and balance sheet claims bridge.")
-            pct("Terminal growth (%)", "terminal_growth", 0, 15)
-            st.caption("Damodaran standard: default 2.50% aligns with Bank Indonesia long-term central inflation target.")
-            pct("Terminal return on invested capital (%)", "terminal_roic", .1, 100)
+            pct(
+                "Terminal growth (%)", "terminal_growth", 0, 15,
+                help="Damodaran perpetual growth rate in Gordon Growth Terminal Value. Default 2.50% aligns with Bank Indonesia long-term central inflation target. Strictly bounded below Indonesian GDP ceiling (4.00%) and WACC."
+            )
             hist_roic_val = compute_historical_roic(historical, b, tax_rate=initial.tax_rate)
             reinv_terminal = (initial.terminal_growth / initial.terminal_roic) if initial.terminal_roic > 0 else 0.0
-            st.caption(
-                f"Calibrated from audited historical median ROIC ({hist_roic_val*100:.1f}%) fading to {initial.terminal_roic*100:.1f}% "
-                f"below median as growth decelerates to perpetuity (WACC {initial.wacc*100:.1f}%). "
-                f"Implied sustainable reinvestment rate: {reinv_terminal*100:.1f}%."
+            pct(
+                "Terminal return on invested capital (%)", "terminal_roic", .1, 100,
+                help=(
+                    f"Calibrated from audited historical median ROIC ({hist_roic_val*100:.1f}%) fading to {initial.terminal_roic*100:.1f}% "
+                    f"below median as growth decelerates to perpetuity (WACC {initial.wacc*100:.1f}%). "
+                    f"Implied sustainable reinvestment rate: {reinv_terminal*100:.1f}% (g / ROIC)."
+                )
             )
-            pct("Valuation weight · DCF (%)", "dcf_weight", 0, 100)
-            pct("Valuation weight · Relative (%)", "relative_weight", 0, 100)
+            pct(
+                "Valuation weight · DCF (%)", "dcf_weight", 0, 100,
+                help="Weight assigned to DCF (FCFF) intrinsic valuation in the blended fair value recommendation. Default 75% aligns with institutional anchor principle."
+            )
+            pct(
+                "Valuation weight · Relative (%)", "relative_weight", 0, 100,
+                help="Weight assigned to Comparable Peers relative valuation in the blended fair value. Default 25% provides an empirical market cross-check when peer similarity criteria are met."
+            )
 
             # Scenario Modeling Paradigm & Parameter Controls
             st.markdown("---")
