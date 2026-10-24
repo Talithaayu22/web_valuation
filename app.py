@@ -10,12 +10,12 @@ import streamlit.components.v1 as components
 try:
     from valuation.data import (
         CATALOG, BILLION, demo_company, demo_peers, fetch_company, peer_record, ticker_symbol,
-        get_default_peers_for_ticker, get_or_fetch_peers, rank_peers_similarity
+        get_default_peers_for_ticker, get_or_fetch_peers, rank_peers_similarity, clean_company_name
     )
 except ImportError:
     from valuation.data import (
         CATALOG, BILLION, demo_company, fetch_company, peer_record, ticker_symbol,
-        get_default_peers_for_ticker, rank_peers_similarity
+        get_default_peers_for_ticker, rank_peers_similarity, clean_company_name
     )
     def demo_peers():
         p1 = demo_company()
@@ -288,7 +288,8 @@ with head:
     st.caption("Connect the statements. Test your assumptions. Understand the price.")
 with status:
     st.markdown(f'<div class="badge">{"ILLUSTRATIVE DEMO" if c["demo"] else escape(c["symbol"]) + " · YAHOO DATA"}</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="hero"><h2>{escape(c["name"])}</h2><p>{escape(c["sector"])} &nbsp; / &nbsp; {escape(c["industry"])} &nbsp; / &nbsp; IDR valuation</p></div>', unsafe_allow_html=True)
+clean_name = clean_company_name(c.get("name", ""))
+st.markdown(f'<div class="hero"><h2>{escape(clean_name)}</h2><p>{escape(c["sector"])} &nbsp; / &nbsp; {escape(c["industry"])}</p></div>', unsafe_allow_html=True)
 if c["demo"]:
     st.info("You’re viewing a fictional business with illustrative financials. Load an IDX ticker from the sidebar to use Yahoo data.")
 else:
@@ -1296,7 +1297,7 @@ with peers_tab:
         table_rows.append({
             "Active": "🎯 TARGET",
             "Ticker": c["symbol"],
-            "Company Name": c["name"],
+            "Company Name": clean_company_name(c["name"]),
             "EBITDA Margin": f"{target_profile['ebitda_margin']:.1%}",
             "DER (D/E)": f"{target_profile['der']:.2f}x",
             "Similarity & Confidence": "100/100 (Benchmark)",
@@ -1326,7 +1327,7 @@ with peers_tab:
             table_rows.append({
                 "Active": "✅ INCLUDED" if is_inc else "❌ EXCLUDED",
                 "Ticker": sym,
-                "Company Name": pc["name"],
+                "Company Name": clean_company_name(pc["name"]),
                 "EBITDA Margin": f"{m_val:.1%}" if m_val is not None else "—",
                 "DER (D/E)": f"{der_val:.2f}x" if der_val is not None else "—",
                 "Similarity & Confidence": f"Rank #{idx+1} · {score_val}/100 ({conf_val} Confidence)",

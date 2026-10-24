@@ -788,3 +788,23 @@ def test_scenario_probabilities_and_expected_value():
     expected_default = sum(prices[s] * probs[s] for s in prices)
     assert expected_default == (1800 * 0.25) + (2500 * 0.50) + (3400 * 0.25)
     assert expected_default == 2550.0
+
+
+def test_clean_company_name():
+    from valuation.data import clean_company_name
+
+    # 1. Strips classic Indonesian BUMN long prefix
+    tlkm = "Perusahaan Perseroan (Persero) PT Telekomunikasi Indonesia Tbk"
+    assert clean_company_name(tlkm) == "PT Telekomunikasi Indonesia Tbk"
+
+    # 2. Strips redundant prefix and inline (Persero)
+    bbri = "Perusahaan Perseroan (Persero) PT Bank Rakyat Indonesia (Persero) Tbk"
+    assert clean_company_name(bbri) == "PT Bank Rakyat Indonesia Tbk"
+
+    # 3. Preserves standard non-SOE company names
+    asii = "PT Astra International Tbk"
+    assert clean_company_name(asii) == "PT Astra International Tbk"
+
+    # 4. Handles empty and whitespace edge cases
+    assert clean_company_name("") == ""
+    assert clean_company_name(None) == ""

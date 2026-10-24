@@ -192,6 +192,18 @@ def normalize(income, balance, cashflow):
     return frame, provenance
 
 
+def clean_company_name(name: str) -> str:
+    """Sanitize Indonesian company names by stripping cumbersome legal prefixes
+    such as 'Perusahaan Perseroan (Persero)' commonly returned by Yahoo Finance.
+    """
+    if not name:
+        return ""
+    cleaned = re.sub(r"^\s*perusahaan\s+perseroan\s*\(persero\)\s*", "", name, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bperusahaan\s+perseroan\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\(persero\)", "", cleaned, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 def fetch_company(symbol):
     symbol = ticker_symbol(symbol)
     cache = Path(__file__).resolve().parents[1] / "data" / "yfinance"
@@ -245,7 +257,7 @@ def fetch_company(symbol):
 
     return dict(
         symbol=symbol,
-        name=info.get("longName", symbol),
+        name=clean_company_name(info.get("longName", symbol)),
         sector=info.get("sector", "Unknown"),
         industry=info.get("industry", "Unknown"),
         financial_currency=fin_curr,
