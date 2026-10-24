@@ -102,6 +102,73 @@ def default_drivers(a, first_year):
     })
 
 
+def compute_historical_roic(historical, b=None, tax_rate=0.22):
+    """Calculates historical median ROIC (NOPAT / Invested Capital) across audited periods.
+    Invested Capital = PPE + Non-Cash NWC + Other Operating Assets.
+    If operating IC is unavailable or <= 0, financing approach (Debt + Equity - Cash) is used.
+    NOPAT = EBIT * (1 - tax_rate).
+    """
+    roics = []
+    if historical is not None and not historical.empty:
+        for col in historical.columns:
+            period_data = historical[col]
+            ebit = period_data.get("ebit")
+            if ebit is None or pd.isna(ebit):
+                rev = period_data.get("revenue")
+                cogs = period_data.get("cogs", 0.0) or 0.0
+                opex = period_data.get("opex", 0.0) or 0.0
+                da = period_data.get("da", 0.0) or 0.0
+                if rev is not None and pd.notna(rev):
+                    ebit = float(rev) - float(cogs) - float(opex) - float(da)
+            if ebit is not None and pd.notna(ebit):
+                try:
+                    nopat = float(ebit) * (1.0 - tax_rate)
+                    ppe = float(period_data.get("ppe") or 0.0)
+                    ar = float(period_data.get("ar") or 0.0)
+                    inv = float(period_data.get("inventory") or 0.0)
+                    other_ca = float(period_data.get("other_ca") or 0.0)
+                    ap = float(period_data.get("ap") or 0.0)
+                    other_cl = float(period_data.get("other_cl") or 0.0)
+                    other_assets = float(period_data.get("other_assets") or 0.0)
+
+                    nwc = ar + inv + other_ca - ap - other_cl
+                    ic = ppe + nwc + other_assets
+                    if ic <= 0:
+                        sd = float(period_data.get("short_debt") or 0.0)
+                        ld = float(period_data.get("long_debt") or 0.0)
+                        eq = float(period_data.get("equity") or 0.0)
+                        cash = float(period_data.get("cash") or 0.0)
+                        ic = sd + ld + eq - cash
+                    if ic > 0:
+                        r = nopat / ic
+                        if math.isfinite(r):
+                            roics.append(r)
+                except (TypeError, ValueError):
+                    pass
+
+    if not roics and b is not None:
+        try:
+            r = float(b.get("revenue", 0.0) or 0.0)
+            ebit_val = b.get("ebit") if b.get("ebit") is not None else (r - float(b.get("cogs", 0.0) or 0.0) - float(b.get("opex", 0.0) or 0.0) - float(b.get("da", 0.0) or 0.0))
+            if ebit_val is not None and pd.notna(ebit_val):
+                nopat = float(ebit_val) * (1.0 - tax_rate)
+                nwc = float(b.get("ar", 0.0) or 0.0) + float(b.get("inventory", 0.0) or 0.0) + float(b.get("other_ca", 0.0) or 0.0) - float(b.get("ap", 0.0) or 0.0) - float(b.get("other_cl", 0.0) or 0.0)
+                ic = float(b.get("ppe", 0.0) or 0.0) + nwc + float(b.get("other_assets", 0.0) or 0.0)
+                if ic <= 0:
+                    ic = float(b.get("short_debt", 0.0) or 0.0) + float(b.get("long_debt", 0.0) or 0.0) + float(b.get("equity", 0.0) or 0.0) - float(b.get("cash", 0.0) or 0.0)
+                if ic > 0:
+                    r = nopat / ic
+                    if math.isfinite(r):
+                        roics.append(r)
+        except (TypeError, ValueError):
+            pass
+
+    if roics:
+        med = float(np.median(roics))
+        return max(0.03, min(0.60, med))
+    return 0.15
+
+
 def infer_assumptions(historical, b, company=None):
     """Derives baseline assumptions from historical data aligned with Damodaran methodology."""
     a = Assumptions()
@@ -193,6 +260,15 @@ def infer_assumptions(historical, b, company=None):
 
     # Year 5 mature growth: smooth convergence midpoint toward perpetual terminal growth
     a.mature_growth = round((a.growth + a.terminal_growth) / 2.0, 4)
+
+    # Dynamic Growth-Deceleration & Competitive Convergence Model for Terminal ROIC
+    # (Damodaran & McKinsey framework: Terminal ROIC fades below historical median toward WACC)
+    hist_roic = compute_historical_roic(historical, b, tax_rate=a.tax_rate)
+    g_init = max(0.02, a.growth)
+    alpha = min(0.60, max(0.35, a.terminal_growth / g_init))
+    converged_roic = alpha * hist_roic + (1.0 - alpha) * a.wacc
+    # Enforce economic floor (terminal_growth + 1.5%) to guarantee reinvestment rate < 100%
+    a.terminal_roic = round(max(a.terminal_growth + 0.015, converged_roic), 4)
 
     return a
 

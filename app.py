@@ -43,7 +43,7 @@ except ImportError:
         return results, errors
 from valuation.model import (
     Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
-    relative_values, infer_assumptions, composite_relative_value, blended_valuation,
+    relative_values, infer_assumptions, compute_historical_roic, composite_relative_value, blended_valuation,
     evaluate_approach_weights, investment_recommendation, explain_peer_selection
 )
 from valuation.export import workbook
@@ -420,6 +420,13 @@ with assumptions_tab:
             pct("Terminal growth (%)", "terminal_growth", 0, 15)
             st.caption("Damodaran standard: default 2.50% aligns with Bank Indonesia long-term central inflation target.")
             pct("Terminal return on invested capital (%)", "terminal_roic", .1, 100)
+            hist_roic_val = compute_historical_roic(historical, b, tax_rate=initial.tax_rate)
+            reinv_terminal = (initial.terminal_growth / initial.terminal_roic) if initial.terminal_roic > 0 else 0.0
+            st.caption(
+                f"Calibrated from audited historical median ROIC ({hist_roic_val*100:.1f}%) fading to {initial.terminal_roic*100:.1f}% "
+                f"below median as growth decelerates to perpetuity (WACC {initial.wacc*100:.1f}%). "
+                f"Implied sustainable reinvestment rate: {reinv_terminal*100:.1f}%."
+            )
             pct("Valuation weight · DCF (%)", "dcf_weight", 0, 100)
             pct("Valuation weight · Relative (%)", "relative_weight", 0, 100)
             pct("Scenario shift · Bull/Bear (+/- %)", "scenario_shift", 0, 20)

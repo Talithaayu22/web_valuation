@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from openpyxl import load_workbook
 from valuation.data import demo_company, normalize, ticker_symbol, peer_record
-from valuation.model import (Assumptions, BASE_FIELDS, base_check, forecast, dcf, sensitivity, default_drivers, relative_values, infer_assumptions, composite_relative_value, blended_valuation, evaluate_approach_weights, investment_recommendation)
+from valuation.model import (Assumptions, BASE_FIELDS, base_check, forecast, dcf, sensitivity, default_drivers, relative_values, infer_assumptions, compute_historical_roic, composite_relative_value, blended_valuation, evaluate_approach_weights, investment_recommendation)
 from valuation.data import rank_peers_similarity
 from valuation.export import workbook
 
@@ -691,3 +691,32 @@ def test_five_year_explicit_forecast_horizon_and_driver_fade(case):
     expected_pv_terminal = r["terminal_value"] / (1 + a.wacc) ** 5
     assert r["pv_terminal"] == pytest.approx(expected_pv_terminal)
     assert r["price"] > 0
+
+
+def test_terminal_roic_below_median_and_aligned_with_growth(case):
+    c, b, _ = case
+    hist_roic = compute_historical_roic(c["historical"], b)
+    assert hist_roic == pytest.approx(0.195, abs=0.005)
+
+    company_meta = dict(price=1400., shares=20e9, beta=1.0)
+    inferred = infer_assumptions(c["historical"], b, company_meta)
+
+    # 1. Terminal ROIC must be strictly lower than historical median due to growth deceleration & competitive convergence
+    assert inferred.terminal_roic < hist_roic
+    assert 0.10 < inferred.terminal_roic < 0.16
+
+    # 2. Terminal ROIC must strictly exceed terminal growth by at least safety floor (1.5%)
+    assert inferred.terminal_roic >= inferred.terminal_growth + 0.015
+
+    # 3. Sustainable terminal reinvestment rate (g / ROIC) is economically bounded between 10% and 50%
+    terminal_reinvestment = inferred.terminal_growth / inferred.terminal_roic
+    assert 0.10 <= terminal_reinvestment <= 0.50
+
+    # 4. When growth deceleration is steeper, compression toward WACC is more pronounced
+    from dataclasses import replace
+    # Simulate high near-term growth firm
+    hist_high_growth = c["historical"].copy()
+    hist_high_growth.loc["revenue", "2025-12-31"] = hist_high_growth.loc["revenue", "2022-12-31"] * 2.5 # ~35% CAGR
+    inferred_high = infer_assumptions(hist_high_growth, b, company_meta)
+    # Higher initial growth relative to 2.5% terminal growth yields minimum alpha (0.35), compressing ROIC closer to WACC
+    assert inferred_high.terminal_roic <= inferred.terminal_roic
