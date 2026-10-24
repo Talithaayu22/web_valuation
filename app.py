@@ -1122,7 +1122,35 @@ with dcf_tab:
         st.caption("Terminal FCFF = Year 6 NOPAT × (1 − terminal growth / terminal ROIC). Annual cash flows are discounted at year-end. The equity bridge uses opening cash and debt, not year-5 balances.")
 
         st.markdown("#### Scenario analysis · Bear / Base / Bull")
-        scen_df = pd.DataFrame(scenario_rows).set_index("Scenario")
+        norm_probs = a.normalized_scenario_probabilities()
+        prices_by_scenario = {r["Scenario"]: r["Value / share"] for r in scenario_rows if pd.notna(r.get("Value / share"))}
+
+        table_rows = list(scenario_rows)
+        expected_dcf_price = None
+        if len(prices_by_scenario) == 3 and base_dcf_price and base_dcf_price > 0:
+            exp_price = sum(r["Value / share"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
+            exp_rev = sum(r["Year 5 revenue"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
+            exp_ebit = sum(r["Year 5 EBIT"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
+            exp_wacc = sum(r["WACC"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
+            exp_g = sum(r["Terminal growth"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
+            exp_roic = sum(r["Terminal ROIC"] * norm_probs.get(r["Scenario"], 0.0) for r in scenario_rows)
+            exp_upside = ((exp_price / base_dcf_price) - 1.0)
+            expected_dcf_price = exp_price
+
+            expected_row = {
+                "Scenario": "Expected (Weighted)",
+                "Probability": 1.0,
+                "Value / share": exp_price,
+                "Upside / Downside": f"{exp_upside:+.1%}",
+                "Year 5 revenue": exp_rev,
+                "Year 5 EBIT": exp_ebit,
+                "WACC": exp_wacc,
+                "Terminal growth": exp_g,
+                "Terminal ROIC": exp_roic,
+            }
+            table_rows.append(expected_row)
+
+        scen_df = pd.DataFrame(table_rows).set_index("Scenario")
         format_dict = {
             "Probability": "{:.1%}",
             "Value / share": "Rp {:,.2f}",
@@ -1138,10 +1166,7 @@ with dcf_tab:
         st.dataframe(scen_df.style.format(format_dict, na_rep="—"), width="stretch")
 
         # Probability-Weighted Expected DCF Fair Value Summary Card
-        norm_probs = a.normalized_scenario_probabilities()
-        prices_by_scenario = {r["Scenario"]: r["Value / share"] for r in scenario_rows if pd.notna(r.get("Value / share"))}
-        if len(prices_by_scenario) == 3 and base_dcf_price and base_dcf_price > 0:
-            expected_dcf_price = sum(prices_by_scenario[scen] * norm_probs.get(scen, 0.0) for scen in ["Bear", "Base", "Bull"])
+        if expected_dcf_price is not None and base_dcf_price and base_dcf_price > 0:
             exp_col1, exp_col2, exp_col3 = st.columns(3)
             with exp_col1:
                 st.metric(
