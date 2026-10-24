@@ -1501,22 +1501,6 @@ with peers_tab:
         else:
             st.info("No multiples meet the eligibility requirement (minimum 2 valid peers required). DCF approach has 100% weighting.")
 
-        # Diagnostic alert for excluded multiples with peer reasons
-        ineligible_multiples = [m for m in metric_order if not rel_breakdown.get(m, {}).get("eligible", False)]
-        if ineligible_multiples:
-            warning_lines = []
-            for m in ineligible_multiples:
-                reasons = (exclusion_info.get(m, []) if 'exclusion_info' in locals() else [])
-                if reasons:
-                    warning_lines.append(f"• **{m}**: Excluded {', '.join(reasons)}.")
-            
-            if warning_lines:
-                st.warning(
-                    "**⚠️ Peer Exclusion Notice (Valuation Integrity Rule):**\n\n" +
-                    "\n".join(warning_lines) +
-                    "\n\n*Under Damodaran relative valuation standards, negative operating metrics are excluded to prevent negative multiple distortion. Multiples with fewer than 2 valid peers are omitted from the benchmark table and relative valuation calculation.*"
-                )
-
         # Plotly comparison chart
         st.markdown("##### Implied Price per Share Comparison")
         chart_bars = []
