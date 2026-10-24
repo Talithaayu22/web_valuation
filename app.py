@@ -1487,32 +1487,43 @@ with peers_tab:
                 (filtered_relative["Implied price (IDR)"] > 0)
             ].copy()
 
+        any_discarded = any(not info.get("eligible", False) for info in rel_breakdown.values()) if rel_breakdown else False
+        weight_col_name = "Normalized weight" if any_discarded else "Weight"
+
         if not filtered_relative.empty and rel_breakdown:
-            filtered_relative["Normalized weight"] = filtered_relative["Multiple"].map(
+            filtered_relative[weight_col_name] = filtered_relative["Multiple"].map(
                 lambda m: rel_breakdown.get(m, {}).get("effective_weight", 0.0) * 100.0
             )
-            col_order = ["Multiple", "Case", "Eligible peers", "Peer multiple", "Normalized weight", "Implied price (IDR)"]
+            col_order = ["Multiple", "Case", "Eligible peers", "Peer multiple", weight_col_name, "Implied price (IDR)"]
             filtered_relative = filtered_relative[[c for c in col_order if c in filtered_relative.columns]]
 
         st.markdown(f"**Multiples Benchmark & Implied Value ({sel_agg})**")
         if not filtered_relative.empty:
+            table_col_config = {
+                "Eligible peers": st.column_config.TextColumn(
+                    label="Eligible peers",
+                    help="Tickers of comparable peers meeting positive metric criteria for this multiple."
+                ),
+                "Peer multiple": st.column_config.NumberColumn(format="%.2fx"),
+                "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")
+            }
+            if any_discarded:
+                table_col_config[weight_col_name] = st.column_config.NumberColumn(
+                    label="Normalized weight",
+                    help="Normalized effective weight after discarding ineligible multiples (< 2 valid peers or non-positive value). Re-weights eligible multiples so their sum equals exactly 100.0%.",
+                    format="%.1f%%"
+                )
+            else:
+                table_col_config[weight_col_name] = st.column_config.NumberColumn(
+                    label="Weight",
+                    format="%.1f%%"
+                )
+
             st.dataframe(
                 filtered_relative,
                 hide_index=True,
                 width="stretch",
-                column_config={
-                    "Eligible peers": st.column_config.TextColumn(
-                        label="Eligible peers",
-                        help="Tickers of comparable peers meeting positive metric criteria for this multiple."
-                    ),
-                    "Peer multiple": st.column_config.NumberColumn(format="%.2fx"),
-                    "Normalized weight": st.column_config.NumberColumn(
-                        label="Normalized weight",
-                        help="Normalized effective weight after discarding ineligible multiples (< 2 valid peers or non-positive value). Re-weights eligible multiples so their sum equals exactly 100.0%.",
-                        format="%.1f%%"
-                    ),
-                    "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")
-                }
+                column_config=table_col_config
             )
         else:
             st.info("No multiples meet the eligibility requirement (minimum 2 valid peers required). DCF approach has 100% weighting.")
