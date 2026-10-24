@@ -445,7 +445,8 @@ if active_peers:
     for pc in active_peers:
         if st.session_state.get(key(f"include_{pc['symbol']}"), True):
             try:
-                peer_rows.append(peer_record(pc, period))
+                p_fx = fx if pc.get("financial_currency") == "USD" else 1.0
+                peer_rows.append(peer_record(pc, period, fx=p_fx))
             except ValueError:
                 pass
 elif saved.get("peers"):
@@ -756,7 +757,8 @@ with peers_tab:
         all_candidate_rows = []
         for pc in all_pcs:
             try:
-                p_cand = peer_record(pc, period)
+                p_fx = fx if pc.get("financial_currency") == "USD" else 1.0
+                p_cand = peer_record(pc, period, fx=p_fx)
                 all_candidate_rows.append(p_cand)
             except Exception:
                 pass
@@ -771,7 +773,6 @@ with peers_tab:
             "Active": "🎯 TARGET",
             "Ticker": c["symbol"],
             "Company Name": c["name"],
-            "Sub-Industry": target_profile["industry"],
             "EBITDA Margin": f"{target_profile['ebitda_margin']:.1%}",
             "DER (D/E)": f"{target_profile['der']:.2f}x",
             "Similarity & Confidence": "100/100 (Benchmark)",
@@ -802,7 +803,6 @@ with peers_tab:
                 "Active": "✅ INCLUDED" if is_inc else "❌ EXCLUDED",
                 "Ticker": sym,
                 "Company Name": pc["name"],
-                "Sub-Industry": pc.get("industry", "Unknown"),
                 "EBITDA Margin": f"{m_val:.1%}" if m_val is not None else "—",
                 "DER (D/E)": f"{der_val:.2f}x" if der_val is not None else "—",
                 "Similarity & Confidence": f"Rank #{idx+1} · {score_val}/100 ({conf_val} Confidence)",

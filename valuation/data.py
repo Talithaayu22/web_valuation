@@ -19,11 +19,11 @@ try:
         """
         def request(self, method, url, **kwargs):
             if "doh_url" not in kwargs or not kwargs["doh_url"]:
-                kwargs["doh_url"] = "https://dns.google/dns-query"
+                kwargs["doh_url"] = "https://8.8.8.8/dns-query"
             try:
                 return super().request(method, url, **kwargs)
             except Exception:
-                kwargs["doh_url"] = "https://cloudflare-dns.com/dns-query"
+                kwargs["doh_url"] = "https://1.1.1.1/dns-query"
                 return super().request(method, url, **kwargs)
 
     def get_doh_session():
@@ -251,7 +251,7 @@ def fetch_company(symbol):
         financial_currency=fin_curr,
         price_currency=price_curr,
         suggested_fx=suggested_fx,
-        price=number(info.get("currentPrice", info.get("regularMarketPrice"))),
+        price=number(info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose") or (getattr(t, "fast_info", None) and getattr(t.fast_info, "get", lambda _: None)("lastPrice"))),
         shares=number(info.get("sharesOutstanding")),
         beta=beta,
         market_cap=number(info.get("marketCap")),
@@ -386,7 +386,7 @@ def get_or_fetch_peers(tickers, target_symbol=None):
     return results, errors
 
 
-def peer_record(company, period, fx=1.0, claims=None):
+def peer_record(company, period, fx=None, claims=None):
     h = company["historical"]
     if period not in h.columns:
         raise ValueError(f"No matching fiscal period {period}; excluded rather than mixing periods.")
@@ -395,7 +395,13 @@ def peer_record(company, period, fx=1.0, claims=None):
     price, shares = company["price"], company["shares"]
     if not price or not shares:
         raise ValueError("Market price or shares unavailable.")
-    p = h[period]
+
+    # Financial currency alignment for USD-reporting IDX issuers
+    fin_curr = company.get("financial_currency", "IDR")
+    if fx is None or fx <= 0:
+        fx = float(company.get("suggested_fx", 16000.0 if fin_curr == "USD" else 1.0))
+
+    p = h[period] * fx if (fin_curr != "IDR" and fx > 1.0) else h[period]
     if any(pd.isna(p.get(k)) for k in ("cash", "short_debt", "long_debt")):
         raise ValueError("Cash or debt unavailable; cannot calculate a comparable EV.")
     market_cap = price * shares / BILLION

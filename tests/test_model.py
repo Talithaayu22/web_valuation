@@ -547,3 +547,46 @@ def test_similarity_score_and_confidence_level():
     scores = [r["similarity_score"] for r in ranked]
     assert scores == sorted(scores, reverse=True)
 
+def test_usd_peer_currency_alignment_prevents_multiple_anomaly():
+    from valuation.data import demo_peers, peer_record
+    from valuation.model import relative_values, composite_relative_value
+
+    demo = demo_peers()[0]
+    period = demo["historical"].columns[-1]
+
+    # Mock a peer reporting in USD with statements in USD billions but traded in IDR
+    usd_peer = dict(demo)
+    usd_peer["symbol"] = "USD_PEER.JK"
+    usd_peer["financial_currency"] = "USD"
+    usd_peer["price_currency"] = "IDR"
+    usd_peer["price"] = 2500.0  # IDR per share
+    usd_peer["shares"] = 10.0e9  # 10 billion shares -> Market Cap = 25,000 IDR bn
+    usd_peer["suggested_fx"] = 16000.0
+    # Raw statements in USD billions (e.g. EBITDA is 0.5 USD bn = 8,000 IDR bn)
+    usd_peer["historical"] = demo["historical"] / 16000.0
+
+    # Test peer_record automatically aligns USD statements using suggested_fx
+    pr = peer_record(usd_peer, period)
+    assert pr["market_cap"] == 25000.0
+    # EBITDA should be converted to ~8,000 IDR bn, NOT left as 0.5 USD bn
+    assert pr["ebitda"] > 100.0  # IDR billions
+    
+    # EV/EBITDA multiple must be realistic (< 50x), never in the tens of thousands
+    ev_ebitda = pr["ev"] / pr["ebitda"]
+    assert 1.0 < ev_ebitda < 30.0
+
+    # Test relative valuation on target
+    target = dict(
+        revenue=100000.0,
+        ebit=20000.0,
+        ebitda=25000.0,
+        net_income=15000.0,
+        book_equity=50000.0
+    )
+    rel_df = relative_values([pr, pr], target, cash=10000.0, debt=5000.0, shares=28.0)
+    assert not rel_df.empty
+    
+    # Implied value per share must be realistic (in thousands of IDR, NOT in millions)
+    for p_impl in rel_df["Implied price (IDR)"].dropna():
+        assert 500.0 < p_impl < 50000.0
+
