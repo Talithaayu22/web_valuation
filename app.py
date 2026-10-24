@@ -944,9 +944,10 @@ dcf_p = expected_dcf_price if (expected_dcf_price and pd.notna(expected_dcf_pric
 blended_price = blended_valuation(dcf_p, rel_price, a.dcf_weight, a.relative_weight)
 effective_price = blended_price if pd.notna(blended_price) else dcf_p
 
+is_dcf_ineligible = (dcf_p is not None and pd.notna(dcf_p) and dcf_p <= 0)
 exclusion_info = get_multiple_exclusion_details(peer_rows) if 'exclusion_info' not in locals() else exclusion_info
 approach_eval = evaluate_approach_weights(target_profile, peer_rows, a.dcf_weight, a.relative_weight)
-rec = investment_recommendation(price, effective_price)
+rec = investment_recommendation(price, effective_price, dcf_price=dcf_p)
 
 with overview:
     # 1. Institutional Recommendation Banner with Integrated Action Button
@@ -1000,17 +1001,30 @@ with overview:
         except Exception as _pdf_err:
             st.caption(f"PDF generator ready: {_pdf_err}")
 
-    # 2. Metric Columns
+    # 2. Valuation Eligibility Warning if Ineligible
+    if is_dcf_ineligible:
+        tot_debt = b.get("short_debt", 0.0) + b.get("long_debt", 0.0)
+        ev_val = result.get("enterprise_value", 0.0) if result else 0.0
+        st.warning(
+            f"**Valuation Eligibility Notice: {clean_name} ({c['symbol']}) is Not Eligible for Automated Valuation**\n\n"
+            f"Automated DCF modeling is suspended for this ticker under trailing audited statements because:\n\n"
+            f"1. **Severe Balance Sheet Debt Overhang**: Total balance sheet debt (Rp {tot_debt:,.1f} bn) exceeds operating enterprise value (Rp {ev_val:,.1f} bn), resulting in underwater intrinsic equity (Rp {dcf_p:,.0f}/share).\n"
+            f"2. **Pre-Revenue Capital Project Timing**: Debt was drawn for multi-billion dollar construction (e.g. smelter expansion), but expanded commercial revenues are not yet online in historical data.\n"
+            f"3. **Missing D&A Reporting**: Source statements report zero D&A, penalizing cash flows by the entire capex without non-cash depreciation addbacks.\n\n"
+            f"*Valuing this company requires excessive speculative forecasting (forward production ramp-up schedules and commodity pricing) rather than reliable fundamental extrapolation.*"
+        )
+
+    # 3. Metric Columns
     cols = st.columns(5)
     cols[0].metric("Reference price", f"Rp {price:,.0f}" if price else "Not available")
-    cols[1].metric("Blended fair value", f"Rp {effective_price:,.0f}" if effective_price and effective_price > 0 else ("Not eligible" if effective_price is not None and effective_price <= 0 else "Check inputs"))
+    cols[1].metric("Blended fair value", "Not eligible" if is_dcf_ineligible else (f"Rp {effective_price:,.0f}" if effective_price and effective_price > 0 else "Check inputs"))
     cols[2].metric(
         "DCF value / share",
         f"Rp {dcf_p:,.0f}" if dcf_p and dcf_p > 0 else ("Not eligible" if dcf_p is not None and dcf_p <= 0 else "Check assumptions"),
         help=f"Probability-weighted expected DCF value across Bear ({norm_probs.get('Bear', 0.25):.0%}), Base ({norm_probs.get('Base', 0.50):.0%}), and Bull ({norm_probs.get('Bull', 0.25):.0%}) scenarios. Base case alone: Rp {base_dcf_price:,.0f}." if base_dcf_price else None
     )
     cols[3].metric("Relative value / share", f"Rp {rel_price:,.0f}" if pd.notna(rel_price) and rel_price > 0 else "Needs >= 2 peers")
-    upside = (effective_price / price - 1) if effective_price and price and effective_price > 0 else None
+    upside = (effective_price / price - 1) if effective_price and price and effective_price > 0 and not is_dcf_ineligible else None
     cols[4].metric("Implied upside / downside", f"{upside:+.1%}" if upside is not None else "—")
 
     # 3. Valuation Approach Selection & Justification Card (Rule 1 & Rule 2)

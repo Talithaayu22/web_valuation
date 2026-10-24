@@ -955,3 +955,12 @@ def test_relative_values_includes_eligible_peers_tickers():
     assert ebit_row["Eligible peers"] == "ISAT"
     assert ebit_row["Peers used"] == 1
 
+
+def test_investment_recommendation_handles_negative_dcf_equity():
+    # When DCF equity is negative (debt overhang), recommendation must be NOT ELIGIBLE even if blended has residual relative value
+    rec = investment_recommendation(reference_price=4030.0, blended_price=209.0, dcf_price=-314.0)
+    assert rec["rating"] == "NOT ELIGIBLE"
+    assert rec["color"] == "#6c757d"
+    assert "Ineligible" in rec["summary"]
+
+

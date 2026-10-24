@@ -746,12 +746,12 @@ def evaluate_approach_weights(target_profile, peer_records, default_dcf_weight=0
         return dict(dcf_weight=dcf_w, rel_weight=rel_w, quality="Insufficient Peers", rationale=rationale, peers_valid=False)
 
 
-def investment_recommendation(reference_price, blended_price, hurdle_rate=0.15):
+def investment_recommendation(reference_price, blended_price, hurdle_rate=0.15, dcf_price=None):
     """Generates an institutional recommendation and margin of safety analysis:
     - BUY / OVERWEIGHT: Implied upside > +15%
     - HOLD / NEUTRAL: Implied upside between -15% and +15%
     - SELL / UNDERWEIGHT: Implied upside < -15%
-    - Distressed Balance Sheet: blended_price <= 0 due to debt exceeding enterprise value
+    - NOT ELIGIBLE: blended_price <= 0 or dcf_price <= 0 due to debt exceeding enterprise value
     """
     if not reference_price or not (reference_price > 0):
         return dict(
@@ -771,16 +771,17 @@ def investment_recommendation(reference_price, blended_price, hurdle_rate=0.15):
             summary="Fair value calculation pending review of inputs."
         )
 
-    if blended_price <= 0:
+    if (dcf_price is not None and pd.notna(dcf_price) and dcf_price <= 0) or blended_price <= 0:
+        underwater_val = dcf_price if (dcf_price is not None and pd.notna(dcf_price) and dcf_price <= 0) else blended_price
         return dict(
             rating="NOT ELIGIBLE",
             upside=0.0,
             margin_of_safety=0.0,
             color="#6c757d",
             summary=(
-                f"Ineligible for Valuation Model: Operating enterprise value is insufficient to cover net debt "
-                f"(fundamental equity value is underwater at Rp {blended_price:,.2f}). "
-                f"Standard going-concern non-financial DCF is not applicable to financially distressed capital structures."
+                f"Ineligible for Valuation Model: Operating enterprise value is insufficient to cover balance sheet debt "
+                f"(fundamental intrinsic equity is underwater at Rp {underwater_val:,.2f}/share). "
+                f"Standard going-concern non-financial DCF is not applicable without explicit forward capacity assumptions."
             )
         )
 
