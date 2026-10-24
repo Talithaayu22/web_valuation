@@ -396,12 +396,14 @@ def peer_record(company, period, fx=None, claims=None):
     if not price or not shares:
         raise ValueError("Market price or shares unavailable.")
 
-    # Financial currency alignment for USD-reporting IDX issuers
-    fin_curr = company.get("financial_currency", "IDR")
-    if fx is None or fx <= 0:
-        fx = float(company.get("suggested_fx", 16000.0 if fin_curr == "USD" else 1.0))
-
-    p = h[period] * fx if (fin_curr != "IDR" and fx > 1.0) else h[period]
+    # Unconditional financial currency alignment for USD/foreign-reporting IDX issuers
+    fin_curr = (company.get("financial_currency") or "IDR").upper()
+    if fin_curr != "IDR":
+        if fx is None or fx <= 1.0:
+            fx = float(company.get("suggested_fx", 16000.0 if fin_curr == "USD" else 1.0))
+        p = h[period] * fx
+    else:
+        p = h[period]
     if any(pd.isna(p.get(k)) for k in ("cash", "short_debt", "long_debt")):
         raise ValueError("Cash or debt unavailable; cannot calculate a comparable EV.")
     market_cap = price * shares / BILLION

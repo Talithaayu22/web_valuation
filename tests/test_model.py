@@ -590,3 +590,79 @@ def test_usd_peer_currency_alignment_prevents_multiple_anomaly():
     for p_impl in rel_df["Implied price (IDR)"].dropna():
         assert 500.0 < p_impl < 50000.0
 
+def test_adro_full_pipeline_produces_realistic_multiples_and_upside():
+    from valuation.data import demo_peers, peer_record
+    from valuation.model import relative_values, composite_relative_value, blended_valuation, investment_recommendation
+
+    demo = demo_peers()[0]
+    period = demo["historical"].columns[-1]
+
+    # Target: ADRO reporting in USD (converted to IDR using fx=18050)
+    target_fx = 18050.0
+    adro_price = 2460.0
+    adro_shares = 28.8005  # bn shares
+    # Raw statements in USD: revenue = 1.87 USD bn, ebitda = 0.53 USD bn
+    target = dict(
+        revenue=1.8735 * target_fx,
+        ebit=0.5295 * target_fx,
+        ebitda=0.5336 * target_fx,
+        net_income=0.4477 * target_fx,
+        book_equity=5.0 * target_fx
+    )
+    adro_cash = 1.5803 * target_fx
+    adro_debt = 0.8213 * target_fx
+
+    # Peer 1: PTBA reporting in IDR
+    ptba = dict(demo)
+    ptba["symbol"] = "PTBA.JK"
+    ptba["financial_currency"] = "IDR"
+    ptba["price_currency"] = "IDR"
+    ptba["price"] = 3280.0
+    ptba["shares"] = 11.514e9
+
+    # Peer 2: BUMI reporting in USD
+    bumi = dict(demo)
+    bumi["symbol"] = "BUMI.JK"
+    bumi["financial_currency"] = "USD"
+    bumi["price_currency"] = "IDR"
+    bumi["price"] = 140.0
+    bumi["shares"] = 371.3e9
+    bumi["suggested_fx"] = 18050.0
+    bumi["historical"] = demo["historical"] / 18050.0
+
+    # Peer 3: INDY reporting in USD
+    indy = dict(demo)
+    indy["symbol"] = "INDY.JK"
+    indy["financial_currency"] = "USD"
+    indy["price_currency"] = "IDR"
+    indy["price"] = 2190.0
+    indy["shares"] = 5.202e9
+    indy["suggested_fx"] = 18050.0
+    indy["historical"] = demo["historical"] / 18050.0
+
+    # Calling peer_record with default fx=None
+    pr_ptba = peer_record(ptba, period)
+    pr_bumi = peer_record(bumi, period)
+    pr_indy = peer_record(indy, period)
+
+    # Every peer EV/EBITDA multiple must be between 1x and 40x, NEVER tens of thousands
+    for pr in [pr_ptba, pr_bumi, pr_indy]:
+        ev_ebitda = pr["ev"] / pr["ebitda"]
+        assert 1.0 < ev_ebitda < 40.0, f"{pr['ticker']} EV/EBITDA anomaly: {ev_ebitda}"
+
+    rel_df = relative_values([pr_ptba, pr_bumi, pr_indy], target, cash=adro_cash, debt=adro_debt, shares=adro_shares)
+    assert not rel_df.empty
+
+    rel_price = composite_relative_value(rel_df, case="Median")
+    assert 1000.0 < rel_price < 25000.0, f"Relative price anomaly: {rel_price}"
+
+    # Blended valuation with DCF (e.g. 1783 IDR)
+    dcf_price = 1782.95
+    blended = blended_valuation(dcf_price, rel_price, 0.75, 0.25)
+    assert 1000.0 < blended < 10000.0
+
+    # Investment recommendation upside
+    rec = investment_recommendation(adro_price, blended)
+    # Upside must be realistic, strictly < +200%, NEVER +500,000%
+    assert -0.50 < rec["upside"] < 2.0, f"Upside anomaly: {rec['upside']:.1%}"
+
