@@ -1458,24 +1458,24 @@ with peers_tab:
             if is_elig and pd.notna(price_val):
                 p_display = f"Rp {price_val:,.0f}"
                 sub_display = f"{mult_val:.2f}x ({sel_agg})"
-                status_html = f"<span style='color: #087f69; font-weight: 700; font-size: 11px;'>✅ ELIGIBLE ({peers_used} peers)</span>"
+                status_html = f"<span style='color: #087f69; font-weight: 700; font-size: 11px;'>ELIGIBLE ({peers_used} peers)</span>"
                 note_html = ""
             else:
                 p_display = "—"
                 sub_display = f"{mult_val:.2f}x" if pd.notna(mult_val) else "No peers"
-                status_html = f"<span style='color: #d9822b; font-weight: 700; font-size: 11px;'>⚠️ INELIGIBLE ({peers_used}/2 peers)</span>"
+                status_html = f"<span style='color: #d9822b; font-weight: 700; font-size: 11px;'>INELIGIBLE ({peers_used}/2 peers)</span>"
                 note_html = f"<div style='font-size: 10px; color: #8a5314; margin-top: 4px; line-height: 1.25;'>Excluded {', '.join(excl_reasons)} to prevent negative multiple distortion.</div>" if excl_reasons else ""
 
-            st.markdown(
-                f"""<div style="background: #f8faf9; border: 1px solid #d2ded8; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
-                <div style="font-size: 11px; text-transform: uppercase; color: #5a7369; font-weight: 700;">{m_name}</div>
-                <div style="font-size: 22px; font-weight: 800; color: #1e332d; margin: 4px 0;">{p_display}</div>
-                <div style="font-size: 12px; color: #35504f;">{sub_display} &nbsp;|&nbsp; Eff. W: <b>{eff_w:.0%}</b></div>
-                <div style="margin-top: 4px;">{status_html}</div>
-                {note_html}
-                </div>""",
-                unsafe_allow_html=True
+            card_html = (
+                f'<div style="background: #f8faf9; border: 1px solid #d2ded8; border-radius: 8px; padding: 12px; margin-bottom: 8px;">'
+                f'<div style="font-size: 11px; text-transform: uppercase; color: #5a7369; font-weight: 700;">{m_name}</div>'
+                f'<div style="font-size: 22px; font-weight: 800; color: #1e332d; margin: 4px 0;">{p_display}</div>'
+                f'<div style="font-size: 12px; color: #35504f;">{sub_display} &nbsp;|&nbsp; Eff. W: <b>{eff_w:.0%}</b></div>'
+                f'<div style="margin-top: 4px;">{status_html}</div>'
+                f'{note_html}'
+                f'</div>'
             )
+            st.markdown(card_html, unsafe_allow_html=True)
 
     # Multiples distribution table filtered by chosen aggregator and eligibility (>= 2 peers)
     if not relative.empty:
