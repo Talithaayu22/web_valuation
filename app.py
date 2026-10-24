@@ -472,21 +472,8 @@ with st.sidebar:
     st.caption(f"Cost of equity {a.cost_of_equity:.2%} · Target debt weight {a.debt_weight:.0%}")
     st.info("💡 Edit operating, macro WACC, and valuation policy assumptions in the **Valuation assumptions** tab.")
 
-with statements:
-    st.subheader("Five years, three connected statements")
-    st.caption("Edit the annual drivers below. Values use percent points: enter 8 for 8%. Reset restores the sidebar assumptions.")
-    if st.button("Reset annual overrides", key=key("reset")):
-        st.session_state[key("driver_version")] = st.session_state.get(key("driver_version"), 0) + 1
-        st.session_state[key("ignore_saved_drivers")] = True
-    driver_defaults = default_drivers(a, first_year)
-    signature = str((a.growth, a.mature_growth, a.ebit_margin, a.mature_margin, a.capex_pct))
-    saved_drivers = saved.get("drivers") if not st.session_state.get(key("ignore_saved_drivers")) else None
-    if saved_drivers and signature == str((initial.growth, initial.mature_growth, initial.ebit_margin, initial.mature_margin, initial.capex_pct)):
-        driver_defaults = pd.DataFrame(saved_drivers)
-    drivers = st.data_editor(
-        driver_defaults, hide_index=True, disabled=["Year"], width="stretch", height=390,
-        key=key(f"drivers_{signature}_{st.session_state.get(key('driver_version'), 0)}")
-    )
+# Derive 5-year drivers directly from Valuation Assumptions
+drivers = default_drivers(a, first_year)
 
 try:
     f = forecast(b, a, first_year, drivers)
@@ -767,6 +754,8 @@ with overview:
     st.caption(f"Model check: maximum balance sheet difference IDR {f.balance_check.abs().max():,.6f} bn. Forecasts start after fiscal {period}; current price is a reference, not a synchronized historical quote.")
 
 with statements:
+    st.subheader("Five years, three connected statements")
+    st.caption("Forecasted financial statements derived from the operational and macroeconomic drivers configured in the Valuation Assumptions tab.")
     income_rows = ["revenue", "cogs", "opex", "da", "ebitda", "ebit", "nopat", "interest", "tax", "net_income"]
     bs_rows = ["cash", "ar", "inventory", "other_ca", "ppe", "other_assets", "assets", "ap", "other_cl", "short_debt", "long_debt", "other_liabilities", "liabilities", "equity", "balance_check"]
     cf_rows = ["net_income", "da", "delta_nwc", "cfo", "capex", "cfi", "funding", "repayment", "dividends", "cff", "cash_change", "cash", "fcff", "reinvestment", "invested_capital", "roic"]
