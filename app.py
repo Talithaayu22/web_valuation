@@ -695,18 +695,40 @@ with peers_tab:
     # 1. PEER SELECTION & MANAGEMENT BAR
     c_input, c_btn1, c_btn2 = st.columns([3, 1, 1])
     with c_input:
-        cur_peer_list = [pc["symbol"].replace(".JK", "") for pc in st.session_state.get("peer_companies", [])]
-        default_text = ", ".join(cur_peer_list) if cur_peer_list else default_peer_tickers
-        peer_text = st.text_input("Active Peer Tickers (comma-separated)", value=saved.get("peer_text", default_text), key=key("peer_text"), help="Add or remove IDX tickers. Target is excluded.")
+        manual_peer_text = st.text_input(
+            "Manual Additional Peers",
+            value="",
+            placeholder="e.g. UNVR, ICBP, INDF",
+            key=key("manual_peer_input"),
+            help="Enter additional IDX tickers separated by commas to add them to the peer comparison set. Target is excluded."
+        )
     with c_btn1:
         st.write("")
         st.write("")
-        if st.button("Update Peers", type="primary", key=key("fetch_peers"), width="stretch"):
-            raw_symbols = [v.strip() for v in peer_text.split(",") if v.strip()]
-            with st.spinner("Fetching peer statements via DoH…"):
-                new_pcs, new_errs = get_or_fetch_peers(raw_symbols, target_symbol=c["symbol"])
-                st.session_state.peer_companies = new_pcs
-                st.session_state.peer_errors = new_errs
+        if st.button("Add Peers", type="primary", key=key("fetch_peers"), width="stretch"):
+            raw_symbols = [v.strip().upper().replace(".JK", "") for v in manual_peer_text.split(",") if v.strip()]
+            clean_target = c["symbol"].replace(".JK", "").upper()
+            existing_symbols = {pc["symbol"].replace(".JK", "").upper() for pc in st.session_state.get("peer_companies", [])}
+
+            new_symbols = []
+            new_errs = list(st.session_state.get("peer_errors", []))
+            for sym in raw_symbols:
+                if sym == clean_target:
+                    new_errs.append(f"{sym}: Target company cannot be added as its own peer.")
+                elif sym in existing_symbols:
+                    st.session_state[key(f"include_{sym}.JK")] = True
+                    st.session_state[key(f"include_{sym}")] = True
+                else:
+                    new_symbols.append(sym)
+
+            if new_symbols:
+                with st.spinner("Fetching peer statements via DoH…"):
+                    new_pcs, fetch_errs = get_or_fetch_peers(new_symbols, target_symbol=c["symbol"])
+                    st.session_state.peer_companies = list(st.session_state.get("peer_companies", [])) + new_pcs
+                    for pc in new_pcs:
+                        st.session_state[key(f"include_{pc['symbol']}")] = True
+                    new_errs.extend(fetch_errs)
+            st.session_state.peer_errors = new_errs
             st.rerun()
     with c_btn2:
         st.write("")
@@ -717,6 +739,8 @@ with peers_tab:
                 new_pcs, new_errs = get_or_fetch_peers(suggested[:4], target_symbol=c["symbol"])
                 st.session_state.peer_companies = new_pcs
                 st.session_state.peer_errors = new_errs
+                for pc in new_pcs:
+                    st.session_state[key(f"include_{pc['symbol']}")] = True
             st.rerun()
 
     for err in st.session_state.get("peer_errors", []):
@@ -726,7 +750,7 @@ with peers_tab:
     all_pcs = st.session_state.get("peer_companies", [])
     if all_pcs:
         st.markdown("#### 1. Comparable Peer Selection & Similarity Ranking")
-        st.caption("Peers are ranked by financial similarity (EBITDA Margin & Debt-to-Equity DER distance). Use checkboxes to include or exclude individual peers from valuation.")
+        st.caption("Peers are ranked by financial similarity (EBITDA Margin & Debt-to-Equity DER distance). Use checkboxes to include or exclude individual peers from valuation, or '✕' to remove.")
 
         # Compute peer records and rankings
         all_candidate_rows = []
@@ -753,12 +777,19 @@ with peers_tab:
             "Similarity Rank": "0.00 (Benchmark)",
         })
 
-        # Columns for checkboxes
+        # Columns for checkboxes & removal
         cols_cb = st.columns(min(4, max(1, len(all_pcs))))
         for idx, pc in enumerate(all_pcs):
             sym = pc["symbol"]
+            clean_sym = sym.replace('.JK', '')
             with cols_cb[idx % len(cols_cb)]:
-                is_inc = st.checkbox(f"Include {sym.replace('.JK', '')}", value=st.session_state.get(key(f"include_{sym}"), True), key=key(f"include_{sym}"))
+                c_cb, c_rm = st.columns([3, 1])
+                with c_cb:
+                    is_inc = st.checkbox(f"Include {clean_sym}", value=st.session_state.get(key(f"include_{sym}"), True), key=key(f"include_{sym}"))
+                with c_rm:
+                    if st.button("✕", key=key(f"rm_{sym}"), help=f"Remove {clean_sym} from peer list"):
+                        st.session_state.peer_companies = [p for p in st.session_state.peer_companies if p["symbol"] != sym]
+                        st.rerun()
 
             r_info = rank_map.get(sym, {})
             m_val = r_info.get("ebitda_margin")

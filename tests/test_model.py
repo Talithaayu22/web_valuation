@@ -443,3 +443,60 @@ def test_demo_peers_structure():
         assert "historical" in p
         assert p["price"] > 0
         assert p["shares"] > 0
+
+def test_manual_peer_addition_and_deduplication():
+    from valuation.data import demo_peers
+    from valuation.data import rank_peers_similarity, peer_record
+
+    target_symbol = "UNTR.JK"
+    target_clean = "UNTR"
+    initial_peers = demo_peers()  # ADRO.JK, PTBA.JK
+    assert len(initial_peers) == 2
+
+    existing_symbols = {p["symbol"].replace(".JK", "").upper() for p in initial_peers}
+
+    # Case 1: Target company entered in manual additional peers -> rejected
+    raw_input = "UNTR, DEMO1, BYAN"
+    symbols = [s.strip().upper().replace(".JK", "") for s in raw_input.split(",")]
+    rejected = [s for s in symbols if s == target_clean]
+    assert "UNTR" in rejected
+
+    # Case 2: Already existing peer -> deduplicated
+    already_present = [s for s in symbols if s in existing_symbols]
+    assert "DEMO1" in already_present
+
+    # Case 3: Genuine new peer -> BYAN
+    to_add = [s for s in symbols if s != target_clean and s not in existing_symbols]
+    assert to_add == ["BYAN"]
+
+    # Mock new peer company dict
+    new_peer_company = {
+        "symbol": "BYAN.JK",
+        "name": "Bayan Resources Tbk",
+        "industry": "Thermal Coal",
+        "sector": "Energy",
+        "price": 18000.0,
+        "shares": 33.3,
+        "price_currency": "IDR",
+        "historical": initial_peers[0]["historical"].copy()
+    }
+    updated_peers = list(initial_peers) + [new_peer_company]
+    assert len(updated_peers) == 3
+
+    # Verify rank_peers_similarity handles all 3 peers
+    target_prof = {
+        "industry": "Thermal Coal",
+        "ebitda_margin": 0.22,
+        "der": 0.35
+    }
+    period = initial_peers[0]["historical"].columns[-1]
+    candidate_rows = [peer_record(p, period) for p in updated_peers]
+    ranked = rank_peers_similarity(target_prof, candidate_rows)
+    assert len(ranked) == 3
+    assert {r["ticker"] for r in ranked} == {"DEMO1.JK", "DEMO2.JK", "BYAN.JK"}
+
+    # Case 4: Removal of peer (simulating '✕' button)
+    removed_peers = [p for p in updated_peers if p["symbol"] != "DEMO1.JK"]
+    assert len(removed_peers) == 2
+    assert "DEMO1.JK" not in {p["symbol"] for p in removed_peers}
+
