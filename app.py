@@ -7,13 +7,13 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from valuation.data import (
-    CATALOG, BILLION, demo_company, fetch_company, peer_record, ticker_symbol,
-    get_default_peers_for_ticker, rank_peers_similarity
+    CATALOG, BILLION, demo_company, demo_peers, fetch_company, peer_record, ticker_symbol,
+    get_default_peers_for_ticker, get_or_fetch_peers, rank_peers_similarity
 )
 from valuation.model import (
     Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
     relative_values, infer_assumptions, composite_relative_value, blended_valuation,
-    evaluate_approach_weights, investment_recommendation
+    evaluate_approach_weights, investment_recommendation, explain_peer_selection
 )
 from valuation.export import workbook
 from valuation import storage
@@ -44,8 +44,12 @@ def activate(company, saved=None):
     st.session_state.company = company
     st.session_state.revision = st.session_state.get("revision", 0) + 1
     st.session_state.saved_inputs = saved or {}
-    st.session_state.pop("peer_companies", None)
-    st.session_state.pop("peer_errors", None)
+    if company.get("demo"):
+        st.session_state.peer_companies = demo_peers()
+        st.session_state.peer_errors = []
+    else:
+        st.session_state.pop("peer_companies", None)
+        st.session_state.pop("peer_errors", None)
 
 
 def pack_company(c):
@@ -369,13 +373,48 @@ default_peer_tickers = ", ".join(get_default_peers_for_ticker(c["symbol"], c.get
 peer_rows = []
 relative = pd.DataFrame()
 rel_price = float("nan")
+rel_breakdown = {}
+
+# Multiple aggregator choice (Median or Harmonic mean)
+rel_agg_choice = st.session_state.get(key("rel_agg_choice"), "Median")
+
+# Configurable multiple weights (default: EV/EBITDA 35%, EV/EBIT 20%, P/E 25%, P/BV 20%)
+w_ebitda = float(st.session_state.get(key("w_mult_ebitda"), 35.0))
+w_ebit = float(st.session_state.get(key("w_mult_ebit"), 20.0))
+w_pe = float(st.session_state.get(key("w_mult_pe"), 25.0))
+w_pbv = float(st.session_state.get(key("w_mult_pbv"), 20.0))
+mult_weights_raw = {
+    "EV / EBITDA": w_ebitda,
+    "EV / EBIT": w_ebit,
+    "P / E": w_pe,
+    "P / BV": w_pbv
+}
+tot_mult_w = sum(mult_weights_raw.values())
+if tot_mult_w > 0:
+    mult_weights_norm = {k: v / tot_mult_w for k, v in mult_weights_raw.items()}
+else:
+    mult_weights_norm = {k: 0.25 for k in mult_weights_raw}
+
+# Auto-initialize peers in session state if missing
+if "peer_companies" not in st.session_state or st.session_state.peer_companies is None:
+    if c.get("demo"):
+        st.session_state.peer_companies = demo_peers()
+        st.session_state.peer_errors = []
+    elif saved.get("peers"):
+        st.session_state.peer_companies = []
+    else:
+        # Pre-load suggested peers
+        suggested_init = get_default_peers_for_ticker(c["symbol"], c.get("industry"))
+        pcs_init, errs_init = get_or_fetch_peers(suggested_init[:4], target_symbol=c["symbol"])
+        st.session_state.peer_companies = pcs_init
+        st.session_state.peer_errors = errs_init
 
 active_peers = st.session_state.get("peer_companies", [])
 if active_peers:
     for pc in active_peers:
         if st.session_state.get(key(f"include_{pc['symbol']}"), True):
             pfx = float(pc.get("suggested_fx", 1.0))
-            if pc["financial_currency"] != "IDR":
+            if pc.get("financial_currency") != "IDR":
                 pfx = float(st.session_state.get(key(f"fx_{pc['symbol']}"), pfx))
             claims = float(st.session_state.get(key(f"claims_{pc['symbol']}"), 0.0))
             try:
@@ -396,7 +435,14 @@ if peer_rows and shares > 0:
     )
     relative = relative_values(peer_rows, target, b["cash"], b["short_debt"] + b["long_debt"], shares, a.other_claims, a.nonoperating_assets)
     if len(peer_rows) >= 2:
-        rel_price = composite_relative_value(relative)
+        rel_price, rel_breakdown = composite_relative_value(
+            relative,
+            metrics=("EV / EBITDA", "EV / EBIT", "P / E", "P / BV"),
+            case=rel_agg_choice,
+            weights=mult_weights_norm,
+            min_peers=2,
+            return_breakdown=True
+        )
 
 dcf_p = result["price"] if result else None
 blended_price = blended_valuation(dcf_p, rel_price, a.dcf_weight, a.relative_weight)
@@ -613,111 +659,255 @@ with dcf_tab:
         st.warning("Review WACC, terminal growth, terminal ROIC, shares, and year-10 earnings to calculate DCF.")
 
 with peers_tab:
-    st.subheader("Value in the company of peers")
-    st.caption(f"Annual fiscal-period basis: {period}. Tickers are pre-filtered by sub-industry ({c.get('industry', 'General')}) and ranked by financial similarity (EBITDA Margin & Debt-to-Equity). Minimum 2 peers required for valuation policy.")
-    peer_text = st.text_input("Peer IDX tickers, separated by commas", value=saved.get("peer_text", default_peer_tickers), key=key("peer_text"))
-    if st.button("Fetch peer financials", type="primary", key=key("fetch_peers")):
-        companies, errors = [], []
-        with st.spinner("Loading peer statements…"):
-            for value in list(dict.fromkeys(peer_text.split(",")))[:8]:
-                if not value.strip():
-                    continue
-                try:
-                    symbol = ticker_symbol(value)
-                    if symbol == c["symbol"]:
-                        raise ValueError("Target company cannot be its own peer.")
-                    pc = get_company(symbol)
-                    if pc["sector"] == "Financial Services":
-                        raise ValueError("Financial-sector companies are not comparable in this operating-company model.")
-                    companies.append(pc)
-                except Exception as exc:
-                    errors.append(f"{value.strip()}: {exc}")
-        st.session_state.peer_companies = companies
-        st.session_state.peer_errors = errors
-        st.rerun()
+    st.subheader("Comparable Peers & Relative Valuation")
+    st.caption(
+        f"Fiscal Period: {period} (FY-End) · Sub-Industry: {c.get('industry', 'General')} · "
+        f"Target Ticker: {c['symbol']} (automatically excluded from peers). "
+        f"Valuation Policy: Multiples require at least 2 valid peers to be eligible."
+    )
 
-    for error in st.session_state.get("peer_errors", []):
-        st.warning(error)
+    # 1. PEER SELECTION & MANAGEMENT BAR
+    c_input, c_btn1, c_btn2 = st.columns([3, 1, 1])
+    with c_input:
+        cur_peer_list = [pc["symbol"].replace(".JK", "") for pc in st.session_state.get("peer_companies", [])]
+        default_text = ", ".join(cur_peer_list) if cur_peer_list else default_peer_tickers
+        peer_text = st.text_input("Active Peer Tickers (comma-separated)", value=saved.get("peer_text", default_text), key=key("peer_text"), help="Add or remove IDX tickers. Target is excluded.")
+    with c_btn1:
+        st.write("")
+        st.write("")
+        if st.button("Update Peers", type="primary", key=key("fetch_peers"), width="stretch"):
+            raw_symbols = [v.strip() for v in peer_text.split(",") if v.strip()]
+            with st.spinner("Fetching peer statements via DoH…"):
+                new_pcs, new_errs = get_or_fetch_peers(raw_symbols, target_symbol=c["symbol"])
+                st.session_state.peer_companies = new_pcs
+                st.session_state.peer_errors = new_errs
+            st.rerun()
+    with c_btn2:
+        st.write("")
+        st.write("")
+        if st.button("Reset Defaults", key=key("reset_peers"), width="stretch"):
+            suggested = get_default_peers_for_ticker(c["symbol"], c.get("industry"))
+            with st.spinner("Loading default peers…"):
+                new_pcs, new_errs = get_or_fetch_peers(suggested[:4], target_symbol=c["symbol"])
+                st.session_state.peer_companies = new_pcs
+                st.session_state.peer_errors = new_errs
+            st.rerun()
 
-    tab_peer_rows = []
-    for pc in st.session_state.get("peer_companies", []):
-        with st.expander(f"{pc['symbol']} · {pc['name']}", expanded=True):
-            if not st.checkbox("Include in comparison", value=True, key=key(f"include_{pc['symbol']}")):
-                continue
-            st.caption(f"{pc['sector']} / {pc['industry']} · Financial currency {pc['financial_currency']} · Retrieved {pc['fetched_at']}")
+    for err in st.session_state.get("peer_errors", []):
+        st.warning(err)
+
+    # 2. INTERACTIVE PEER SELECTION & SIMILARITY TABLE
+    all_pcs = st.session_state.get("peer_companies", [])
+    if all_pcs:
+        st.markdown("#### 1. Comparable Peer Selection & Similarity Ranking")
+        st.caption("Peers are ranked by financial similarity (EBITDA Margin & Debt-to-Equity DER distance). Use checkboxes to include or exclude individual peers from valuation.")
+
+        # Compute peer records and rankings
+        all_candidate_rows = []
+        for pc in all_pcs:
             pfx = float(pc.get("suggested_fx", 1.0))
-            if pc["financial_currency"] != "IDR":
-                pfx = st.number_input("IDR per reporting currency unit", min_value=0., value=pfx, key=key(f"fx_{pc['symbol']}"))
-            claims = st.number_input("Net EV adjustment: minorities + other claims − non-operating assets (IDR bn)", value=0., key=key(f"claims_{pc['symbol']}"))
+            if pc.get("financial_currency") != "IDR":
+                pfx = float(st.session_state.get(key(f"fx_{pc['symbol']}"), pfx))
+            claims = float(st.session_state.get(key(f"claims_{pc['symbol']}"), 0.0))
             try:
-                if pfx <= 0:
-                    raise ValueError("Verify the currency conversion to include this peer.")
-                tab_peer_rows.append(peer_record(pc, period, pfx, claims if claims != 0 else None))
-            except ValueError as exc:
-                st.warning(str(exc))
+                p_cand = peer_record(pc, period, pfx, claims if claims != 0 else None)
+                all_candidate_rows.append(p_cand)
+            except Exception:
+                pass
 
-    if not tab_peer_rows and saved.get("peers"):
-        tab_peer_rows = saved["peers"]
-        st.info("Using the peer snapshot from this saved analysis. Fetch peers above to replace it with fresh data.")
+        ranked_all = rank_peers_similarity(target_profile, all_candidate_rows) if all_candidate_rows else []
+        rank_map = {r["ticker"]: r for r in ranked_all}
 
-    if tab_peer_rows:
-        ranked_peers = rank_peers_similarity(target_profile, tab_peer_rows)
-        st.markdown("**Peer similarity ranking (Target vs Peers)**")
-        similarity_data = [
-            {
-                "Type": "Target",
-                "Ticker": c["symbol"],
-                "Sub-industry": target_profile["industry"],
-                "EBITDA margin": f"{target_profile['ebitda_margin']:.1%}",
-                "DER (Debt / Equity)": f"{target_profile['der']:.2f}x",
-                "Similarity score": "0.00 (Benchmark)"
-            }
-        ]
-        for r in ranked_peers:
-            similarity_data.append({
-                "Type": "Peer",
-                "Ticker": r["ticker"],
-                "Sub-industry": r.get("industry", "Unknown"),
-                "EBITDA margin": f"{r['ebitda_margin']:.1%}" if r.get("ebitda_margin") is not None else "—",
-                "DER (Debt / Equity)": f"{r['der']:.2f}x" if r.get("der") is not None else "—",
-                "Similarity score": f"{r.get('similarity_distance', 0):.2f}"
+        # Build interactive peer inclusion controls and display table
+        table_rows = []
+        # Target row as benchmark
+        table_rows.append({
+            "Active": "🎯 TARGET",
+            "Ticker": c["symbol"],
+            "Company Name": c["name"],
+            "Sub-Industry": target_profile["industry"],
+            "EBITDA Margin": f"{target_profile['ebitda_margin']:.1%}",
+            "DER (D/E)": f"{target_profile['der']:.2f}x",
+            "Similarity Rank": "0.00 (Benchmark)",
+            "Why Selected?": "Target Valuation Anchor",
+        })
+
+        # Columns for checkboxes
+        cols_cb = st.columns(min(4, max(1, len(all_pcs))))
+        for idx, pc in enumerate(all_pcs):
+            sym = pc["symbol"]
+            with cols_cb[idx % len(cols_cb)]:
+                is_inc = st.checkbox(f"Include {sym.replace('.JK', '')}", value=st.session_state.get(key(f"include_{sym}"), True), key=key(f"include_{sym}"))
+
+            r_info = rank_map.get(sym, {})
+            why_text = explain_peer_selection(target_profile, r_info) if r_info else "Comparable candidate"
+            m_val = r_info.get("ebitda_margin")
+            der_val = r_info.get("der")
+            dist_val = r_info.get("similarity_distance", 0.0)
+
+            table_rows.append({
+                "Active": "✅ INCLUDED" if is_inc else "❌ EXCLUDED",
+                "Ticker": sym,
+                "Company Name": pc["name"],
+                "Sub-Industry": pc.get("industry", "Unknown"),
+                "EBITDA Margin": f"{m_val:.1%}" if m_val is not None else "—",
+                "DER (D/E)": f"{der_val:.2f}x" if der_val is not None else "—",
+                "Similarity Rank": f"Rank #{idx+1} (Dist: {dist_val:.2f})",
+                "Why Selected?": why_text,
             })
-        st.dataframe(pd.DataFrame(similarity_data), hide_index=True, width="stretch")
 
-        if len(tab_peer_rows) < 2:
-            st.warning(f"Valuation Policy Requirement: Minimum 2 peers required for Relative Valuation. Currently {len(tab_peer_rows)} selected.")
-        else:
-            st.success(f"Peer criteria met: {len(tab_peer_rows)} peers active.")
+        st.dataframe(pd.DataFrame(table_rows), hide_index=True, width="stretch")
 
-        target = dict(
-            revenue=b["revenue"],
-            ebit=b["revenue"] - b["cogs"] - b["opex"] - b["da"],
-            ebitda=target_ebitda,
-            net_income=b["net_income"],
-            book_equity=max(0.0, b.get("equity", 0.0) - a.other_claims),
-        )
-        if shares > 0:
-            tab_relative = relative_values(tab_peer_rows, target, b["cash"], b["short_debt"] + b["long_debt"], shares, a.other_claims, a.nonoperating_assets)
-            st.markdown("**Implied price per share from peer multiples**")
-            st.dataframe(tab_relative, hide_index=True, width="stretch", column_config={"Peer multiple": st.column_config.NumberColumn(format="%.2fx"), "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")})
-            
-            c_case, _ = st.columns([1, 2])
-            selected_agg = c_case.selectbox("Multiple aggregator for composite & chart:", ["Median", "Harmonic mean"], index=0, key=key("rel_agg_choice"))
-            
-            bench_df = tab_relative[tab_relative.Case == selected_agg]
-            chart(go.Figure(go.Bar(x=bench_df.Multiple, y=bench_df["Implied price (IDR)"], marker_color="#087f69")), f"IDR / share ({selected_agg})")
-            
-            tab_rel_price = composite_relative_value(tab_relative, case=selected_agg)
-            if len(tab_peer_rows) >= 2 and pd.notna(tab_rel_price):
-                c_dcf, c_rel = st.columns(2)
-                c_dcf.metric(f"DCF Fair Value ({a.dcf_weight:.0%} weight)", f"Rp {result['price']:,.0f}" if result else "—")
-                c_rel.metric(f"Composite Relative Value ({a.relative_weight:.0%} weight)", f"Rp {tab_rel_price:,.0f}")
-                tab_blended = blended_valuation(result["price"] if result else None, tab_rel_price, a.dcf_weight, a.relative_weight)
-                st.metric("Blended Fair Value / Share", f"Rp {tab_blended:,.0f}")
-                st.caption(f"Composite multiple is the unweighted average of valid peer {selected_agg.lower()} multiples (EV/EBITDA, P/E, P/BV). Harmonic mean (Damodaran & Bhojraj-Lee) eliminates upward skew caused by outliers with near-zero denominators.")
+        with st.expander("Advanced Peer Adjustments (Currency FX & EV Claims)"):
+            for pc in all_pcs:
+                sym = pc["symbol"]
+                st.markdown(f"**{sym} · {pc['name']}**")
+                c_fx, c_cl = st.columns(2)
+                pfx = float(pc.get("suggested_fx", 1.0))
+                if pc.get("financial_currency") != "IDR":
+                    c_fx.number_input(f"FX Rate ({pc.get('financial_currency')}/IDR)", min_value=0.0, value=pfx, key=key(f"fx_{sym}"))
+                c_cl.number_input(f"Net EV Adjustment (IDR bn) for {sym}", value=float(st.session_state.get(key(f"claims_{sym}"), 0.0)), key=key(f"claims_{sym}"))
+
     else:
-        st.info("Click 'Fetch peer financials' above to load industry-matched peers and calculate relative multiples.")
-        st.info("Choose comparable IDX businesses to calculate EV/EBITDA, EV/EBIT, P/E, and P/BV ranges. Peer data is fetched only when requested.")
+        st.info("No peers currently loaded. Click 'Reset Defaults' above to automatically load suggested peers.")
+
+    # 3. RELATIVE VALUATION MULTIPLES & WEIGHTING
+    st.divider()
+    st.markdown("#### 2. Relative Valuation Calculations & Multiple Weights")
+
+    if len(peer_rows) < 2:
+        st.warning(f"⚠️ Policy Rule Active: Minimum 2 valid active peers required for relative multiples (currently {len(peer_rows)} active). DCF has 100% weighting.")
+    else:
+        st.success(f"✅ Peer criteria met: {len(peer_rows)} active comparable peers.")
+
+    # Aggregator and Weights controls
+    c_agg, c_w1, c_w2, c_w3, c_w4 = st.columns([1.5, 1, 1, 1, 1])
+    with c_agg:
+        sel_agg = st.selectbox(
+            "Benchmark Multiple Aggregator",
+            ["Median", "Harmonic mean"],
+            index=0 if rel_agg_choice == "Median" else 1,
+            key=key("rel_agg_choice"),
+            help="Median is the market standard. Harmonic Mean eliminates upward skew from near-zero earnings (Damodaran & Bhojraj-Lee)."
+        )
+    with c_w1:
+        st.number_input("EV / EBITDA Weight (%)", min_value=0.0, max_value=100.0, value=w_ebitda, step=5.0, key=key("w_mult_ebitda"))
+    with c_w2:
+        st.number_input("EV / EBIT Weight (%)", min_value=0.0, max_value=100.0, value=w_ebit, step=5.0, key=key("w_mult_ebit"))
+    with c_w3:
+        st.number_input("P / E Weight (%)", min_value=0.0, max_value=100.0, value=w_pe, step=5.0, key=key("w_mult_pe"))
+    with c_w4:
+        st.number_input("P / BV Weight (%)", min_value=0.0, max_value=100.0, value=w_pbv, step=5.0, key=key("w_mult_pbv"))
+
+    # Validation message for weights
+    if abs(tot_mult_w - 100.0) > 0.01:
+        st.warning(f"⚠️ Multiple weights sum to {tot_mult_w:.1f}%. Calculation automatically normalizes weights to 100%.")
+    else:
+        st.caption(f"Weights validated: 100.0% total allocation.")
+
+    # 4. SUMMARY KPI CARDS
+    st.markdown("##### Multiple Summary Cards (Independent Implied Values)")
+    card_cols = st.columns(4)
+    metric_order = ["EV / EBITDA", "EV / EBIT", "P / E", "P / BV"]
+
+    for idx, m_name in enumerate(metric_order):
+        m_info = rel_breakdown.get(m_name, {})
+        with card_cols[idx]:
+            is_elig = m_info.get("eligible", False)
+            price_val = m_info.get("implied_price")
+            mult_val = m_info.get("peer_multiple")
+            peers_used = m_info.get("peers_used", 0)
+            eff_w = m_info.get("effective_weight", 0.0)
+
+            if is_elig and pd.notna(price_val):
+                p_display = f"Rp {price_val:,.0f}"
+                sub_display = f"{mult_val:.2f}x ({sel_agg})"
+                status_html = f"<span style='color: #087f69; font-weight: 700; font-size: 11px;'>✅ ELIGIBLE ({peers_used} peers)</span>"
+            else:
+                p_display = "—"
+                sub_display = f"{mult_val:.2f}x" if pd.notna(mult_val) else "No peers"
+                status_html = f"<span style='color: #d9822b; font-weight: 700; font-size: 11px;'>⚠️ INELIGIBLE ({peers_used}/2 peers)</span>"
+
+            st.markdown(
+                f"""<div style="background: #f8faf9; border: 1px solid #d2ded8; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: #5a7369; font-weight: 700;">{m_name}</div>
+                <div style="font-size: 22px; font-weight: 800; color: #1e332d; margin: 4px 0;">{p_display}</div>
+                <div style="font-size: 12px; color: #35504f;">{sub_display} &nbsp;|&nbsp; Eff. W: <b>{eff_w:.0%}</b></div>
+                <div style="margin-top: 4px;">{status_html}</div>
+                </div>""",
+                unsafe_allow_html=True
+            )
+
+    # Multiples distribution table
+    if not relative.empty:
+        st.markdown("**Detailed Multiples Distribution (Lower Quartile, Median, Harmonic Mean, Upper Quartile)**")
+        st.dataframe(
+            relative,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Peer multiple": st.column_config.NumberColumn(format="%.2fx"),
+                "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")
+            }
+        )
+
+        # Plotly comparison chart
+        st.markdown("##### Implied Price per Share Comparison")
+        chart_bars = []
+        bar_colors = []
+        bar_labels = []
+        for m_name in metric_order:
+            m_info = rel_breakdown.get(m_name, {})
+            p_val = m_info.get("implied_price")
+            if pd.notna(p_val) and m_info.get("eligible", False):
+                chart_bars.append(p_val)
+                bar_labels.append(m_name)
+                bar_colors.append("#2e7d32")
+
+        if pd.notna(rel_price):
+            chart_bars.append(rel_price)
+            bar_labels.append("Weighted Relative")
+            bar_colors.append("#00838f")
+
+        if dcf_p and pd.notna(dcf_p):
+            chart_bars.append(dcf_p)
+            bar_labels.append("DCF Fair Value")
+            bar_colors.append("#1565c0")
+
+        if price and pd.notna(price):
+            chart_bars.append(price)
+            bar_labels.append("Market Price")
+            bar_colors.append("#d84315")
+
+        fig_rv = go.Figure(go.Bar(
+            x=bar_labels,
+            y=chart_bars,
+            marker_color=bar_colors,
+            text=[f"Rp {v:,.0f}" for v in chart_bars],
+            textposition="auto"
+        ))
+        chart(fig_rv, "IDR / share")
+
+    # 5. DUAL-METHOD TRIANGULATION & RECOMMENDATION
+    st.divider()
+    st.markdown("#### 3. Dual-Method Triangulation & Investment Recommendation")
+    c_dcf, c_rel, c_blended = st.columns(3)
+    c_dcf.metric(f"DCF Fair Value ({a.dcf_weight:.0%} weight)", f"Rp {dcf_p:,.0f}" if dcf_p else "—")
+    c_rel.metric(f"Composite Relative Value ({a.relative_weight:.0%} weight)", f"Rp {rel_price:,.0f}" if pd.notna(rel_price) else "—")
+    c_blended.metric("Blended Fair Value / Share", f"Rp {blended_price:,.0f}" if pd.notna(blended_price) else "—")
+
+    # Summary recommendation card
+    st.markdown(
+        f"""<div style="background-color: {rec['color']}15; border-left: 5px solid {rec['color']}; padding: 14px 18px; border-radius: 8px; margin: 12px 0;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: {rec['color']}; text-transform: uppercase;">INVESTMENT RECOMMENDATION · MID-TERM DECISION CRITERIA</span>
+        <div style="display: flex; align-items: baseline; gap: 16px; margin: 6px 0 4px;">
+            <span style="font-size: 24px; font-weight: 800; color: {rec['color']};">{rec['rating']}</span>
+            <span style="font-size: 15px; color: #2e3e3b;">Implied Upside: <b>{rec['upside']:+.1%}</b> &nbsp;|&nbsp; Margin of Safety: <b>{rec['margin_of_safety']:.1%}</b></span>
+        </div>
+        <div style="font-size: 13px; color: #435451;">{rec['summary']}</div>
+        </div>""",
+        unsafe_allow_html=True
+    )
 
 with st.sidebar:
     st.divider()

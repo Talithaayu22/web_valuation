@@ -399,21 +399,131 @@ def relative_values(peers, target, cash, debt, shares, other_claims=0, nonoperat
     return pd.DataFrame(rows)
 
 
-def composite_relative_value(relative_df, metrics=("EV / EBITDA", "P / E", "P / BV"), case="Median"):
-    """Calculates the composite average implied price from peer multiples (defaults to Median, supports Harmonic mean).
-    Requires at least one valid multiple from the specified metrics.
+def composite_relative_value(
+    relative_df, 
+    metrics=("EV / EBITDA", "EV / EBIT", "P / E", "P / BV"), 
+    case="Median", 
+    weights=None, 
+    min_peers=2, 
+    return_breakdown=False
+):
+    """Calculates the composite implied price from peer multiples (defaults to Median, supports Harmonic mean).
+    - Requires at least `min_peers` (default 2) valid peer multiples per metric to be ELIGIBLE.
+    - If `weights` dict is provided (e.g. {'EV / EBITDA': 0.4, 'EV / EBIT': 0.2, 'P / E': 0.2, 'P / BV': 0.2}),
+      computes the normalized weighted average implied price over eligible multiples.
+    - If return_breakdown is True, returns (composite_price, breakdown_dict).
     """
     if relative_df is None or relative_df.empty:
-        return float("nan")
+        return (float("nan"), {}) if return_breakdown else float("nan")
+
     case_rows = relative_df[relative_df["Case"] == case]
-    valid_prices = []
+    breakdown = {}
+    eligible_prices = []
+    eligible_weights = []
+
     for m in metrics:
         subset = case_rows[case_rows["Multiple"] == m]
         if not subset.empty:
-            price = subset.iloc[0]["Implied price (IDR)"]
-            if pd.notna(price) and math.isfinite(price) and price > 0:
-                valid_prices.append(price)
-    return float(np.mean(valid_prices)) if valid_prices else float("nan")
+            row = subset.iloc[0]
+            price = row["Implied price (IDR)"]
+            peers_count = int(row["Peers used"]) if pd.notna(row.get("Peers used")) else 0
+            multiple_val = row["Peer multiple"]
+            is_valid_price = pd.notna(price) and math.isfinite(price) and price > 0
+            is_eligible = is_valid_price and peers_count >= min_peers
+
+            raw_w = 0.0
+            if weights and m in weights:
+                raw_w = max(0.0, float(weights[m]))
+            else:
+                raw_w = 1.0 / len(metrics)
+
+            breakdown[m] = {
+                "multiple_name": m,
+                "peer_multiple": multiple_val,
+                "implied_price": price if is_valid_price else float("nan"),
+                "peers_used": peers_count,
+                "eligible": is_eligible,
+                "configured_weight": raw_w,
+                "effective_weight": 0.0,
+            }
+
+            if is_eligible:
+                eligible_prices.append(price)
+                eligible_weights.append(raw_w)
+        else:
+            breakdown[m] = {
+                "multiple_name": m,
+                "peer_multiple": float("nan"),
+                "implied_price": float("nan"),
+                "peers_used": 0,
+                "eligible": False,
+                "configured_weight": 0.0,
+                "effective_weight": 0.0,
+            }
+
+    if not eligible_prices:
+        comp_price = float("nan")
+    else:
+        tot_w = sum(eligible_weights)
+        if tot_w > 0:
+            norm_weights = [w / tot_w for w in eligible_weights]
+            comp_price = float(np.sum(np.array(eligible_prices) * np.array(norm_weights)))
+            idx = 0
+            for m in metrics:
+                if breakdown[m]["eligible"]:
+                    breakdown[m]["effective_weight"] = norm_weights[idx]
+                    idx += 1
+        else:
+            comp_price = float(np.mean(eligible_prices))
+            eq_w = 1.0 / len(eligible_prices)
+            for m in metrics:
+                if breakdown[m]["eligible"]:
+                    breakdown[m]["effective_weight"] = eq_w
+
+    if return_breakdown:
+        return comp_price, breakdown
+    return comp_price
+
+
+def explain_peer_selection(target_profile, peer_record):
+    """Generates an intuitive, professional 'Why Selected?' explanation for a peer:
+    - Confirms sub-industry match or cross-industry context
+    - Compares EBITDA margin against target
+    - Compares Debt-to-Equity (DER) against target
+    - Mentions financial similarity distance
+    """
+    target_ind = (target_profile.get("industry") or "").strip()
+    peer_ind = (peer_record.get("industry") or "").strip()
+    target_margin = target_profile.get("ebitda_margin")
+    peer_margin = peer_record.get("ebitda_margin")
+    target_der = target_profile.get("der")
+    peer_der = peer_record.get("der")
+    dist = peer_record.get("similarity_distance")
+
+    reasons = []
+    if target_ind and peer_ind and target_ind.lower() == peer_ind.lower():
+        reasons.append(f"Direct sub-industry peer ({target_ind})")
+    elif peer_ind:
+        reasons.append(f"Related industry peer ({peer_ind})")
+
+    if target_margin is not None and peer_margin is not None:
+        margin_diff = abs(peer_margin - target_margin)
+        if margin_diff <= 0.05:
+            reasons.append(f"closely aligned EBITDA margin ({peer_margin:.1%} vs target {target_margin:.1%})")
+        else:
+            reasons.append(f"EBITDA margin {peer_margin:.1%} (target {target_margin:.1%})")
+
+    if target_der is not None and peer_der is not None:
+        der_diff = abs(peer_der - target_der)
+        if der_diff <= 0.3:
+            reasons.append(f"comparable leverage (DER {peer_der:.2f}x vs {target_der:.2f}x)")
+        else:
+            reasons.append(f"DER {peer_der:.2f}x (target {target_der:.2f}x)")
+
+    if dist is not None:
+        reasons.append(f"similarity distance {dist:.2f}")
+
+    return "; ".join(reasons) if reasons else "Industry comparable peer candidate."
 
 
 def blended_valuation(dcf_price, rel_price, dcf_weight=0.75, rel_weight=0.25):

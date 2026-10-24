@@ -295,6 +295,22 @@ def demo_company():
     )
 
 
+def demo_peers():
+    """Returns 2 illustrative peer company dictionaries for the fictional demo."""
+    p1 = demo_company()
+    p1["symbol"] = "DEMO1.JK"
+    p1["name"] = "Bhinneka Consumer · Illustrative Peer"
+    p1["price"] = 1400.0
+    p1["shares"] = 6e9
+
+    p2 = demo_company()
+    p2["symbol"] = "DEMO2.JK"
+    p2["name"] = "Garuda Consumer · Illustrative Peer"
+    p2["price"] = 1100.0
+    p2["shares"] = 10e9
+    return [p1, p2]
+
+
 IDX_INDUSTRY_PEERS = {
     # Thermal Coal / Mining
     "Thermal Coal": ["ADRO", "PTBA", "ITMG", "BUMI", "INDY", "HRUM"],
@@ -334,6 +350,34 @@ def get_default_peers_for_ticker(symbol, industry=None):
     if not candidates:
         candidates = [t for t in ["ADRO", "PTBA", "ITMG", "AKRA", "PGAS"] if t != clean]
     return candidates
+
+
+def get_or_fetch_peers(tickers, target_symbol=None):
+    """Loads peer company dictionaries for the requested tickers,
+    excluding target_symbol and skipping financial companies.
+    Uses resilient session with error isolation.
+    """
+    clean_target = (target_symbol or "").replace(".JK", "").upper()
+    results = []
+    errors = []
+    seen = set()
+    for t in tickers:
+        t_clean = t.strip().upper()
+        if not t_clean or t_clean in seen:
+            continue
+        seen.add(t_clean)
+        try:
+            sym = ticker_symbol(t_clean)
+            clean = sym.replace(".JK", "").upper()
+            if clean == clean_target:
+                continue
+            pc = fetch_company(sym)
+            if pc.get("sector") == "Financial Services":
+                continue
+            results.append(pc)
+        except Exception as e:
+            errors.append(f"{t_clean}: {e}")
+    return results, errors
 
 
 def peer_record(company, period, fx, claims=None):

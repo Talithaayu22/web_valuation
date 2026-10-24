@@ -385,3 +385,61 @@ def test_get_doh_session_injects_secure_dns():
     s = get_doh_session()
     assert s is not None
     assert hasattr(s, "request")
+
+
+def test_composite_relative_value_custom_weights():
+    peers = [
+        dict(ev=100, market_cap=80, revenue=50, ebitda=10, ebit=8, net_income=5, book_equity=40),
+        dict(ev=200, market_cap=160, revenue=100, ebitda=20, ebit=16, net_income=10, book_equity=80),
+    ]
+    target = dict(revenue=100, ebitda=20, ebit=16, net_income=10, book_equity=50)
+    rel_df = relative_values(peers, target, cash=10, debt=30, shares=10)
+
+    # Weights: 50% EV/EBITDA (implied price 18), 50% P/E (implied price 16)
+    weights = {"EV / EBITDA": 0.50, "EV / EBIT": 0.0, "P / E": 0.50, "P / BV": 0.0}
+    comp_price, breakdown = composite_relative_value(rel_df, weights=weights, return_breakdown=True)
+
+    assert comp_price == pytest.approx(17.0)
+    assert breakdown["EV / EBITDA"]["eligible"] is True
+    assert breakdown["P / E"]["eligible"] is True
+    assert breakdown["EV / EBITDA"]["implied_price"] == pytest.approx(18.0)
+    assert breakdown["P / E"]["implied_price"] == pytest.approx(16.0)
+
+
+def test_relative_multiple_eligibility_threshold():
+    import math
+    # Only 1 peer -> all multiples should be INELIGIBLE (< 2 peers)
+    peers = [
+        dict(ev=100, market_cap=80, revenue=50, ebitda=10, ebit=8, net_income=5, book_equity=40)
+    ]
+    target = dict(revenue=100, ebitda=20, ebit=16, net_income=10, book_equity=50)
+    rel_df = relative_values(peers, target, cash=10, debt=30, shares=10)
+
+    comp_price, breakdown = composite_relative_value(rel_df, min_peers=2, return_breakdown=True)
+    assert math.isnan(comp_price)
+    for m in ["EV / EBITDA", "EV / EBIT", "P / E", "P / BV"]:
+        assert breakdown[m]["eligible"] is False
+        assert breakdown[m]["peers_used"] == 1
+
+
+def test_explain_peer_selection():
+    from valuation.model import explain_peer_selection
+    target = dict(industry="Thermal Coal", ebitda_margin=0.25, der=0.40)
+    peer = dict(industry="Thermal Coal", ebitda_margin=0.24, der=0.45, similarity_distance=0.12)
+
+    explanation = explain_peer_selection(target, peer)
+    assert "Direct sub-industry peer (Thermal Coal)" in explanation
+    assert "closely aligned EBITDA margin" in explanation
+    assert "comparable leverage" in explanation
+    assert "similarity distance 0.12" in explanation
+
+
+def test_demo_peers_structure():
+    from valuation.data import demo_peers
+    d_peers = demo_peers()
+    assert len(d_peers) == 2
+    for p in d_peers:
+        assert p["symbol"].endswith(".JK")
+        assert "historical" in p
+        assert p["price"] > 0
+        assert p["shares"] > 0
