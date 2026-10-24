@@ -371,7 +371,6 @@ def relative_values(peers, target, cash, debt, shares, other_claims=0, nonoperat
         raise ValueError("Shares must be positive.")
     rows = []
     multiples_spec = [
-        ("EV / Revenue", "revenue", "ev"),
         ("EV / EBITDA", "ebitda", "ev"),
         ("EV / EBIT", "ebit", "ev"),
         ("P / E", "net_income", "market_cap"),

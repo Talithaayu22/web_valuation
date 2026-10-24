@@ -87,7 +87,8 @@ def test_relative_uses_positive_denominators_and_equity_bridge():
     target = dict(revenue=100,ebitda=20,ebit=16,net_income=10)
     r = relative_values(peers,target,10,30,10).query("Case == 'Median'").set_index("Multiple")
     assert r.loc["EV / EBITDA","Peers used"] == 1
-    assert r.loc["EV / Revenue","Implied price (IDR)"] == pytest.approx(18)
+    assert "EV / Revenue" not in r.index
+    assert r.loc["EV / EBIT","Implied price (IDR)"] == pytest.approx(18)
     assert r.loc["P / E","Implied price (IDR)"] == pytest.approx(16)
 
 

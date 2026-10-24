@@ -717,7 +717,7 @@ with peers_tab:
                 st.caption(f"Composite multiple is the unweighted average of valid peer {selected_agg.lower()} multiples (EV/EBITDA, P/E, P/BV). Harmonic mean (Damodaran & Bhojraj-Lee) eliminates upward skew caused by outliers with near-zero denominators.")
     else:
         st.info("Click 'Fetch peer financials' above to load industry-matched peers and calculate relative multiples.")
-        st.info("Choose comparable IDX businesses to calculate EV/Revenue, EV/EBITDA, EV/EBIT, P/E, and P/BV ranges. Peer data is fetched only when requested.")
+        st.info("Choose comparable IDX businesses to calculate EV/EBITDA, EV/EBIT, P/E, and P/BV ranges. Peer data is fetched only when requested.")
 
 with st.sidebar:
     st.divider()
