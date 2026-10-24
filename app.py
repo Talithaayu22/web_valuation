@@ -5,6 +5,7 @@ import math
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 try:
     from valuation.data import (
@@ -298,19 +299,7 @@ else:
 
 overview, assumptions_tab, statements, dcf_tab, peers_tab, data_tab = st.tabs([
     "Overview", "Valuation assumptions", "5-year model", "DCF & sensitivity", "Relative valuation", "Data review"
-], key="main_tabs")
-
-if st.session_state.pop("scroll_to_scenario_modeling", False):
-    st.html(
-        """
-        <script>
-            setTimeout(() => {
-                const el = document.getElementById('section-04-scenario-modeling');
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 150);
-        </script>
-        """
-    )
+])
 
 with data_tab:
     st.subheader("Start with trustworthy inputs")
@@ -1089,10 +1078,41 @@ with dcf_tab:
             format_dict["Terminal ROIC"] = "{:.2%}"
 
         st.dataframe(scen_df.style.format(format_dict, na_rep="—"), width="stretch")
-        if st.button("Edit scenario drivers", key="btn_edit_scenario_drivers"):
-            st.session_state["main_tabs"] = "Valuation assumptions"
-            st.session_state["scroll_to_scenario_modeling"] = True
-            st.rerun()
+        st.button("Edit scenario drivers", key="btn_edit_scenario_drivers")
+        components.html(
+            """
+            <script>
+                const parentDoc = window.parent.document;
+                if (!parentDoc._scenarioNavInitialized) {
+                    parentDoc._scenarioNavInitialized = true;
+                    parentDoc.addEventListener('click', (e) => {
+                        const btn = e.target.closest('.st-key-btn_edit_scenario_drivers button');
+                        if (btn) {
+                            const tabs = Array.from(parentDoc.querySelectorAll('button[data-testid="stTab"], [role="tab"]'));
+                            const targetTab = tabs.find(t => t.innerText && t.innerText.includes("Valuation assumptions"));
+                            if (targetTab) {
+                                targetTab.click();
+                                let attempts = 0;
+                                const interval = setInterval(() => {
+                                    attempts++;
+                                    const el = parentDoc.getElementById('section-04-scenario-modeling')
+                                            || Array.from(parentDoc.querySelectorAll('h4, div, span')).find(x => x.innerText && x.innerText.includes('04 · Scenario modeling'));
+                                    if (el) {
+                                        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        clearInterval(interval);
+                                    } else if (attempts > 20) {
+                                        clearInterval(interval);
+                                    }
+                                }, 50);
+                            }
+                        }
+                    }, true);
+                }
+            </script>
+            """,
+            height=0,
+            width=0,
+        )
     else:
         st.warning("Review WACC, terminal growth, terminal ROIC, shares, and year-5 earnings to calculate DCF.")
 
