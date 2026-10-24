@@ -298,7 +298,19 @@ else:
 
 overview, assumptions_tab, statements, dcf_tab, peers_tab, data_tab = st.tabs([
     "Overview", "Valuation assumptions", "5-year model", "DCF & sensitivity", "Relative valuation", "Data review"
-])
+], key="main_tabs")
+
+if st.session_state.pop("scroll_to_scenario_modeling", False):
+    st.html(
+        """
+        <script>
+            setTimeout(() => {
+                const el = document.getElementById('section-04-scenario-modeling');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 150);
+        </script>
+        """
+    )
 
 with data_tab:
     st.subheader("Start with trustworthy inputs")
@@ -504,6 +516,7 @@ with assumptions_tab:
 
         # Full-Width Section 04 at the bottom
         st.divider()
+        st.markdown('<div id="section-04-scenario-modeling"></div>', unsafe_allow_html=True)
         st.markdown("#### 04 · Scenario modeling & stress testing")
         st.caption("Simulates macroeconomic and operational regimes across Bear, Base, and Bull cases. Deviations are applied directly to each driver relative to the company baseline.")
         fields["scenario_mode"] = "Coherent Macro & Operating World"
@@ -1076,10 +1089,10 @@ with dcf_tab:
             format_dict["Terminal ROIC"] = "{:.2%}"
 
         st.dataframe(scen_df.style.format(format_dict, na_rep="—"), width="stretch")
-        st.caption(
-            "**Coherent Macro & Operating World**. Scenarios stress operating execution (revenue growth, operating margins, CapEx, and working capital) "
-            "alongside macroeconomic discount rates (WACC), perpetual terminal growth (g), and terminal ROIC."
-        )
+        if st.button("Edit scenario drivers", key="btn_edit_scenario_drivers"):
+            st.session_state["main_tabs"] = "Valuation assumptions"
+            st.session_state["scroll_to_scenario_modeling"] = True
+            st.rerun()
     else:
         st.warning("Review WACC, terminal growth, terminal ROIC, shares, and year-5 earnings to calculate DCF.")
 
