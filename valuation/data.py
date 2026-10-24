@@ -33,6 +33,12 @@ except ImportError:
     def get_doh_session():
         return None
 
+__all__ = [
+    "CATALOG", "BILLION", "demo_company", "demo_peers", "fetch_company", 
+    "peer_record", "ticker_symbol", "get_default_peers_for_ticker", 
+    "get_or_fetch_peers", "rank_peers_similarity", "get_doh_session", "normalize"
+]
+
 BILLION = 1e9
 CATALOG = {
     "TLKM": "Telkom Indonesia", "ASII": "Astra International", "ICBP": "Indofood CBP",

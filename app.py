@@ -6,10 +6,41 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from valuation.data import (
-    CATALOG, BILLION, demo_company, demo_peers, fetch_company, peer_record, ticker_symbol,
-    get_default_peers_for_ticker, get_or_fetch_peers, rank_peers_similarity
-)
+try:
+    from valuation.data import (
+        CATALOG, BILLION, demo_company, demo_peers, fetch_company, peer_record, ticker_symbol,
+        get_default_peers_for_ticker, get_or_fetch_peers, rank_peers_similarity
+    )
+except ImportError:
+    from valuation.data import (
+        CATALOG, BILLION, demo_company, fetch_company, peer_record, ticker_symbol,
+        get_default_peers_for_ticker, rank_peers_similarity
+    )
+    def demo_peers():
+        p1 = demo_company()
+        p1["symbol"] = "DEMO1.JK"
+        p1["name"] = "Bhinneka Consumer · Illustrative Peer"
+        p1["price"] = 1400.0
+        p1["shares"] = 6e9
+        p2 = demo_company()
+        p2["symbol"] = "DEMO2.JK"
+        p2["name"] = "Garuda Consumer · Illustrative Peer"
+        p2["price"] = 1100.0
+        p2["shares"] = 10e9
+        return [p1, p2]
+
+    def get_or_fetch_peers(tickers, target_symbol=None):
+        clean_target = (target_symbol or "").replace(".JK", "").upper()
+        results, errors = [], []
+        for t in tickers:
+            sym = ticker_symbol(t)
+            if sym.replace(".JK", "").upper() == clean_target:
+                continue
+            try:
+                results.append(fetch_company(sym))
+            except Exception as e:
+                errors.append(f"{t}: {e}")
+        return results, errors
 from valuation.model import (
     Assumptions, BASE_FIELDS, base_check, default_drivers, forecast, dcf, sensitivity,
     relative_values, infer_assumptions, composite_relative_value, blended_valuation,
