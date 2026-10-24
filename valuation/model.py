@@ -493,10 +493,14 @@ def relative_values(peers, target, cash, debt, shares, other_claims=0, nonoperat
 
     for label, metric, numerator in multiples_spec:
         multiples = []
+        valid_peer_tickers = []
         for p in peers:
             den, num = p.get(metric), p.get(numerator)
             if den is not None and num is not None and math.isfinite(den) and math.isfinite(num) and den > 0 and num > 0:
                 multiples.append(num / den)
+                t = p.get("ticker") or p.get("symbol") or ""
+                t_clean = t.replace(".JK", "") if t else "Peer"
+                valid_peer_tickers.append(t_clean)
         cases = [
             ("Lower quartile", float(np.percentile(multiples, 25)) if multiples else float("nan")),
             ("Median", float(np.percentile(multiples, 50)) if multiples else float("nan")),
@@ -507,7 +511,14 @@ def relative_values(peers, target, cash, debt, shares, other_claims=0, nonoperat
             denominator = target.get(metric)
             value = mult * denominator if denominator is not None and denominator > 0 else float("nan")
             equity = value + cash + nonoperating_assets - debt - other_claims if numerator == "ev" else value
-            rows.append({"Multiple": label, "Case": name, "Peers used": len(multiples), "Peer multiple": mult, "Implied price (IDR)": equity / shares})
+            rows.append({
+                "Multiple": label,
+                "Case": name,
+                "Eligible peers": ", ".join(valid_peer_tickers) if valid_peer_tickers else "None",
+                "Peers used": len(multiples),
+                "Peer multiple": mult,
+                "Implied price (IDR)": equity / shares
+            })
     return pd.DataFrame(rows)
 
 

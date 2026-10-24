@@ -1491,7 +1491,7 @@ with peers_tab:
             filtered_relative["Normalized weight"] = filtered_relative["Multiple"].map(
                 lambda m: rel_breakdown.get(m, {}).get("effective_weight", 0.0) * 100.0
             )
-            col_order = ["Multiple", "Case", "Peers used", "Peer multiple", "Normalized weight", "Implied price (IDR)"]
+            col_order = ["Multiple", "Case", "Eligible peers", "Peers used", "Peer multiple", "Normalized weight", "Implied price (IDR)"]
             filtered_relative = filtered_relative[[c for c in col_order if c in filtered_relative.columns]]
 
         st.markdown(f"**Multiples Benchmark & Implied Value ({sel_agg})**")
@@ -1501,6 +1501,10 @@ with peers_tab:
                 hide_index=True,
                 width="stretch",
                 column_config={
+                    "Eligible peers": st.column_config.TextColumn(
+                        label="Eligible peers",
+                        help="Tickers of comparable peers meeting positive metric criteria for this multiple."
+                    ),
                     "Peer multiple": st.column_config.NumberColumn(format="%.2fx"),
                     "Normalized weight": st.column_config.NumberColumn(
                         label="Normalized weight",
@@ -1509,6 +1513,25 @@ with peers_tab:
                     ),
                     "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")
                 }
+            )
+
+            # Implied price calculation note
+            calc_terms = []
+            for _, r in filtered_relative.iterrows():
+                p_imp = r.get("Implied price (IDR)")
+                w_norm = r.get("Normalized weight", 0.0) / 100.0
+                if pd.notna(p_imp) and p_imp > 0:
+                    calc_terms.append(f"(Rp {p_imp:,.0f} × {w_norm:.1%})")
+            composite_eq = " + ".join(calc_terms) if calc_terms else ""
+            res_str = f" = **Rp {rel_price:,.0f}**" if pd.notna(rel_price) else ""
+
+            st.caption(
+                f"**Implied Price Calculation Methodology:**\n\n"
+                f"• **Enterprise Value Multiples (EV/EBITDA, EV/EBIT)**: $\\text{{Implied Price}} = [(\\text{{Target Metric}} \\times \\text{{Peer Multiple}}) + \\text{{Cash}} + \\text{{Non-operating Assets}} - \\text{{Debt}} - \\text{{Other Claims}}] / \\text{{Shares}}$.\n\n"
+                f"• **Equity Multiples (P/E, P/BV)**: $\\text{{Implied Price}} = (\\text{{Target Metric}} \\times \\text{{Peer Multiple}}) / \\text{{Shares}}$.\n\n"
+                f"• **Weighted Composite Relative Price**: $\\sum (\\text{{Implied Price}} \\times \\text{{Normalized Weight}})$"
+                + (f" = {composite_eq}{res_str}" if composite_eq else "")
+                + ".\n\n*Only multiples meeting the minimum 2 eligible peers threshold are included; peers with negative operating metrics or losses are excluded to prevent negative multiple distortion.*"
             )
         else:
             st.info("No multiples meet the eligibility requirement (minimum 2 valid peers required). DCF approach has 100% weighting.")

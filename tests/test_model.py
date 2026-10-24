@@ -916,3 +916,42 @@ def test_get_multiple_exclusion_details_detects_operating_and_net_loss():
     assert len(exclusions["P / E"]) == 1
     assert "EXCL" in exclusions["P / E"][0]
     assert "net income" in exclusions["P / E"][0]
+
+
+def test_relative_values_includes_eligible_peers_tickers():
+    p1 = {
+        "ticker": "ISAT.JK",
+        "ev": 100000.0,
+        "market_cap": 50000.0,
+        "ebitda": 25000.0,
+        "ebit": 10000.0,
+        "net_income": 5000.0,
+        "book_equity": 35000.0
+    }
+    p2 = {
+        "ticker": "EXCL.JK",
+        "ev": 90000.0,
+        "market_cap": 30000.0,
+        "ebitda": 18000.0,
+        "ebit": -233.0,
+        "net_income": -4426.0,
+        "book_equity": 28000.0
+    }
+    target = {
+        "revenue": 150000.0,
+        "ebitda": 70000.0,
+        "ebit": 40000.0,
+        "net_income": 25000.0,
+        "book_equity": 120000.0
+    }
+    rel_df = relative_values([p1, p2], target, cash=15000.0, debt=40000.0, shares=100.0)
+    assert "Eligible peers" in rel_df.columns
+    
+    ebitda_row = rel_df[(rel_df["Multiple"] == "EV / EBITDA") & (rel_df["Case"] == "Median")].iloc[0]
+    assert ebitda_row["Eligible peers"] == "ISAT, EXCL"
+    assert ebitda_row["Peers used"] == 2
+    
+    ebit_row = rel_df[(rel_df["Multiple"] == "EV / EBIT") & (rel_df["Case"] == "Median")].iloc[0]
+    assert ebit_row["Eligible peers"] == "ISAT"
+    assert ebit_row["Peers used"] == 1
+
