@@ -1485,7 +1485,14 @@ with peers_tab:
                 (filtered_relative["Peers used"] >= 2) & 
                 (filtered_relative["Implied price (IDR)"].notna()) & 
                 (filtered_relative["Implied price (IDR)"] > 0)
-            ]
+            ].copy()
+
+        if not filtered_relative.empty and rel_breakdown:
+            filtered_relative["Normalized weight"] = filtered_relative["Multiple"].map(
+                lambda m: rel_breakdown.get(m, {}).get("effective_weight", 0.0) * 100.0
+            )
+            col_order = ["Multiple", "Case", "Peers used", "Peer multiple", "Normalized weight", "Implied price (IDR)"]
+            filtered_relative = filtered_relative[[c for c in col_order if c in filtered_relative.columns]]
 
         st.markdown(f"**Multiples Benchmark & Implied Value ({sel_agg})**")
         if not filtered_relative.empty:
@@ -1495,6 +1502,11 @@ with peers_tab:
                 width="stretch",
                 column_config={
                     "Peer multiple": st.column_config.NumberColumn(format="%.2fx"),
+                    "Normalized weight": st.column_config.NumberColumn(
+                        label="Normalized weight",
+                        help="Normalized effective weight after discarding ineligible multiples (< 2 valid peers or non-positive value). Re-weights eligible multiples so their sum equals exactly 100.0%.",
+                        format="%.1f%%"
+                    ),
                     "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")
                 }
             )
