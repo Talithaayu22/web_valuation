@@ -287,7 +287,7 @@ else:
         st.stop()
 
 overview, assumptions_tab, statements, dcf_tab, peers_tab, data_tab = st.tabs([
-    "Overview", "Valuation assumptions", "10-year model", "DCF & sensitivity", "Relative valuation", "Data review"
+    "Overview", "Valuation assumptions", "5-year model", "DCF & sensitivity", "Relative valuation", "Data review"
 ])
 
 with data_tab:
@@ -811,7 +811,7 @@ with dcf_tab:
         st.caption("Terminal FCFF = Year 6 NOPAT × (1 − terminal growth / terminal ROIC). Annual cash flows are discounted at year-end. The equity bridge uses opening cash and debt, not year-5 balances.")
         st.dataframe(pd.DataFrame(scenario_rows).set_index("Scenario").style.format("{:,.2f}"), width="stretch")
     else:
-        st.warning("Review WACC, terminal growth, terminal ROIC, shares, and year-10 earnings to calculate DCF.")
+        st.warning("Review WACC, terminal growth, terminal ROIC, shares, and year-5 earnings to calculate DCF.")
 
 with peers_tab:
     st.subheader("Comparable Peers & Relative Valuation")
