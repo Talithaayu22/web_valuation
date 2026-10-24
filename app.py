@@ -360,8 +360,8 @@ with assumptions_tab:
 
     m_r2_1, m_r2_2, m_r2_3 = st.columns(3)
     m_r2_1.metric("Debt Weight", f"{initial.debt_weight:.0%}")
-    m_r2_2.metric("Initial Growth (Y1–5)", f"{initial.growth:.1%}")
-    m_r2_3.metric("EBIT Margin (Y1–5)", f"{initial.ebit_margin:.1%}")
+    m_r2_2.metric("Initial Growth (Y1–3)", f"{initial.growth:.1%}")
+    m_r2_3.metric("EBIT Margin (Y1–3)", f"{initial.ebit_margin:.1%}")
     st.divider()
 
     with st.form(key("assumptions")):
@@ -375,10 +375,11 @@ with assumptions_tab:
         with col_op:
             st.markdown("#### 01 · Operating model")
             st.caption("Revenue growth, operating margins, reinvestment, and capital intensity.")
-            pct("Growth · years 1–5 (%)", "growth", -50, 100)
-            pct("Growth · year 10 (%)", "mature_growth", -50, 50)
-            pct("EBIT margin · years 1–5 (%)", "ebit_margin", -50, 80)
-            pct("EBIT margin · year 10 (%)", "mature_margin", -50, 80)
+            pct("Growth · years 1–3 (%)", "growth", -50, 100)
+            st.caption(f"Anchored to audited 3-year historical revenue CAGR ({initial.growth:.1%}). Fades across years 4–5 into year 5 mature growth.")
+            pct("Growth · year 5 (%)", "mature_growth", -50, 50)
+            pct("EBIT margin · years 1–3 (%)", "ebit_margin", -50, 80)
+            pct("EBIT margin · year 5 (%)", "mature_margin", -50, 80)
             pct("Gross margin (%)", "gross_margin", 1, 100)
             pct("Corporate tax rate (%)", "tax_rate", 0, 60)
             pct("Capex / revenue (%)", "capex_pct", 0, 100)
@@ -443,22 +444,22 @@ with assumptions_tab:
         )
 
     # Phased Horizon Academic Justification Cards
-    with st.expander("📘 Academic Rationale & 10-Year Phased Horizon (MM6026 Rubric)", expanded=False):
+    with st.expander("📘 Academic Rationale & 5-Year Phased Horizon (MM6026 Rubric)", expanded=False):
         p_col1, p_col2, p_col3 = st.columns(3)
         with p_col1:
-            st.markdown("##### Phase 1 · Expansion (Y1–5)")
+            st.markdown("##### Phase 1 · Operational Momentum (Y1–3)")
             st.caption(
-                "Reflects company-specific operational momentum, backlog execution, and reinvestment capacity. "
+                "Reflects near-term backlog execution, historical 3-year revenue CAGR momentum, and reinvestment capacity. "
                 "Operating margins and CapEx intensity are anchored to audited multi-year medians."
             )
         with p_col2:
-            st.markdown("##### Phase 2 · Convergence (Y6–10)")
+            st.markdown("##### Phase 2 · Convergence (Y4–5)")
             st.caption(
                 "Abnormal competitive advantages (economic moats) gradually dissipate under market competition. "
-                "Growth rates and operating margins linearly fade toward macroeconomic equilibrium."
+                "Growth rates and operating margins smoothly fade toward macroeconomic equilibrium."
             )
         with p_col3:
-            st.markdown("##### Phase 3 · Steady State (Perpetuity)")
+            st.markdown("##### Phase 3 · Steady State (Perpetuity Year 6+)")
             st.caption(
                 "Perpetual growth is bounded by Bank Indonesia's central inflation target (2.50%) with zero perpetual "
                 "volume expansion. Terminal reinvestment is disciplined by sustainable ROIC (g / ROIC)."
@@ -472,7 +473,7 @@ with st.sidebar:
     st.info("💡 Edit operating, macro WACC, and valuation policy assumptions in the **Valuation assumptions** tab.")
 
 with statements:
-    st.subheader("Ten years, three connected statements")
+    st.subheader("Five years, three connected statements")
     st.caption("Edit the annual drivers below. Values use percent points: enter 8 for 8%. Reset restores the sidebar assumptions.")
     if st.button("Reset annual overrides", key=key("reset")):
         st.session_state[key("driver_version")] = st.session_state.get(key("driver_version"), 0) + 1
@@ -511,9 +512,9 @@ for label, shift in [("Bear", -a.scenario_shift), ("Base", 0), ("Bull", a.scenar
     try:
         sf = forecast(b, a, first_year, sd)
         sr = dcf(sf, b, a, shares)
-        scenario_rows.append({"Scenario": label, "Value / share": sr["price"], "Year 10 revenue": sf.iloc[-1].revenue, "Year 10 EBIT": sf.iloc[-1].ebit, "WACC": a.wacc})
+        scenario_rows.append({"Scenario": label, "Value / share": sr["price"], "Year 5 revenue": sf.iloc[-1].revenue, "Year 5 EBIT": sf.iloc[-1].ebit, "WACC": a.wacc})
     except ValueError:
-        scenario_rows.append({"Scenario": label, "Value / share": float("nan"), "Year 10 revenue": float("nan"), "Year 10 EBIT": float("nan"), "WACC": a.wacc})
+        scenario_rows.append({"Scenario": label, "Value / share": float("nan"), "Year 5 revenue": float("nan"), "Year 5 EBIT": float("nan"), "WACC": a.wacc})
 
 # Prepare peer context and blended valuation
 target_ebitda = b["revenue"] - b["cogs"] - b["opex"]
@@ -733,7 +734,7 @@ with overview:
             if result:
                 reinv_rate = result.get('terminal_reinvestment_rate', a.terminal_growth / a.terminal_roic)
                 st.latex(rf"\text{{Reinvestment Rate}} = \frac{{g}}{{\text{{ROIC}}}} = \frac{{{a.terminal_growth*100:.2f}\%}}{{{a.terminal_roic*100:.1f}\%}} = {reinv_rate*100:.1f}\%")
-                st.latex(rf"\text{{Terminal Value}} = \frac{{\text{{NOPAT}}_{{11}} \times (1 - \text{{Reinv}})}}{{WACC - g}} = \frac{{{result['terminal_fcff']:,.1f}}}{{{a.wacc*100:.2f}\% - {a.terminal_growth*100:.2f}\%}} = \text{{Rp }}{result['terminal_value']:,.1f}\text{{ bn}}")
+                st.latex(rf"\text{{Terminal Value}} = \frac{{\text{{NOPAT}}_{{6}} \times (1 - \text{{Reinv}})}}{{WACC - g}} = \frac{{{result['terminal_fcff']:,.1f}}}{{{a.wacc*100:.2f}\% - {a.terminal_growth*100:.2f}\%}} = \text{{Rp }}{result['terminal_value']:,.1f}\text{{ bn}}")
                 st.latex(rf"\text{{Equity Value}} = \text{{EV}} + \text{{Cash}} - \text{{Debt}} - \text{{Claims}} = \text{{Rp }}{result['equity_value']:,.1f}\text{{ bn}}")
                 st.latex(rf"\text{{DCF Value per Share}} = \frac{{\text{{Equity Value}}}}{{\text{{Shares}}}} = \frac{{{result['equity_value']:,.1f}\text{{ bn}}}}{{{shares:.3f}\text{{ bn}}}} = \mathbf{{\text{{Rp }}{result['price']:,.0f}}}")
     l, r = st.columns([1.65, 1])
@@ -789,7 +790,7 @@ with dcf_tab:
         with col1:
             bridge = pd.DataFrame({
                 "Component": [
-                    "PV of 10-year FCFF", "PV of terminal value", "Enterprise value", "Opening cash & marketable securities",
+                    "PV of 5-year FCFF", "PV of terminal value", "Enterprise value", "Opening cash & marketable securities",
                     "Additional non-operating assets", "Opening debt (incl. leases)", "Minorities / other claims", "Equity value"
                 ],
                 "IDR bn": [
@@ -807,7 +808,7 @@ with dcf_tab:
             chart(heat, "WACC")
         st.markdown("**Terminal economics**")
         st.write(f"Growth {a.terminal_growth:.2%} · ROIC {a.terminal_roic:.2%} · Reinvestment rate {result.get('terminal_reinvestment_rate', a.terminal_growth/a.terminal_roic):.1%}")
-        st.caption("Terminal FCFF = Year 11 NOPAT × (1 − terminal growth / terminal ROIC). Annual cash flows are discounted at year-end. The equity bridge uses opening cash and debt, not year-10 balances.")
+        st.caption("Terminal FCFF = Year 6 NOPAT × (1 − terminal growth / terminal ROIC). Annual cash flows are discounted at year-end. The equity bridge uses opening cash and debt, not year-5 balances.")
         st.dataframe(pd.DataFrame(scenario_rows).set_index("Scenario").style.format("{:,.2f}"), width="stretch")
     else:
         st.warning("Review WACC, terminal growth, terminal ROIC, shares, and year-10 earnings to calculate DCF.")
@@ -1080,14 +1081,14 @@ with st.expander("AI Assistance & Model Governance Disclosure (Mid-Term Delivera
     - **Mathematical Invariant Verification**: All financial logic strictly audited with automated tests enforcing:
       1. Complete balance sheet identity: $\\text{Total Assets} - \\text{Total Liabilities} - \\text{Equity} \\equiv 0.000000$ IDR bn across all 10 projection years.
       2. Direct & indirect cash flow reconciliation: $\\text{CFO} + \\text{CFI} + \\text{CFF} \\equiv \\Delta \\text{Cash}$.
-      3. Damodaran Terminal Value Reinvestment: $\\text{Terminal FCFF} = \\text{NOPAT}_{11} \\times (1 - g_n / \\text{ROIC})$.
+      3. Damodaran Terminal Value Reinvestment: $\\text{Terminal FCFF} = \\text{NOPAT}_{6} \\times (1 - g_n / \\text{ROIC})$.
     - **Test Coverage**: 100% automated test suite passing via pytest (19+ unit & integration tests).
     - **Data Boundaries**: Sourced from official annual statements via Yahoo Finance (`yfinance`); non-financial operating companies only.
     """)
 
 with st.expander("Model methodology & current boundaries"):
     st.markdown("""
-    - **Forecast basis:** annual fiscal periods. First five years use the operating assumptions; years six to ten transition linearly to mature growth and margin. Per-year overrides take priority.
+    - **Forecast basis:** annual fiscal periods. First three years use initial operating assumptions; years four and five transition linearly to mature growth and margin. Per-year overrides take priority.
     - **Linked accounts:** revenue, COGS, operating costs, PPE, D&A, working capital, debt, interest, dividends, equity, and cash. Other non-current assets/liabilities stay fixed.
     - **Funding:** shortfalls draw new short-term debt to meet minimum cash. Interest uses opening debt; there is no circular same-year financing interest. Excess cash is retained.
     - **Tax:** positive pretax earnings are taxed; no loss carryforward or deferred-tax schedule. FCFF assumes the selected operating tax rate, including the implied tax treatment of operating losses.

@@ -130,7 +130,7 @@ def test_excel_contains_forecast_and_sensitivity(case):
     book = load_workbook(BytesIO(output))
     assert "Forecast IDR bn" in book.sheetnames
     assert "Sensitivity IDR" in book.sheetnames
-    assert book["Forecast IDR bn"].max_column == 11
+    assert book["Forecast IDR bn"].max_column == 6  # 1 index column + 5 forecast years
 
 
 def test_low_opex_bull_scenario_does_not_crash():
@@ -666,3 +666,28 @@ def test_adro_full_pipeline_produces_realistic_multiples_and_upside():
     # Upside must be realistic, strictly < +200%, NEVER +500,000%
     assert -0.50 < rec["upside"] < 2.0, f"Upside anomaly: {rec['upside']:.1%}"
 
+
+
+def test_five_year_explicit_forecast_horizon_and_driver_fade(case):
+    _, b, a = case
+    d = default_drivers(a, 2026)
+    assert len(d) == 5
+    assert list(d["Year"]) == [2026, 2027, 2028, 2029, 2030]
+    # Years 1-3 hold operational momentum
+    assert d.loc[0, "Growth %"] == pytest.approx(100 * a.growth)
+    assert d.loc[1, "Growth %"] == pytest.approx(100 * a.growth)
+    assert d.loc[2, "Growth %"] == pytest.approx(100 * a.growth)
+    # Years 4-5 transition smoothly to mature growth
+    expected_y4 = 100 * (a.growth * (2.0 / 3.0) + a.mature_growth * (1.0 / 3.0))
+    assert d.loc[3, "Growth %"] == pytest.approx(expected_y4)
+    assert d.loc[4, "Growth %"] == pytest.approx(100 * a.mature_growth)
+
+    f = forecast(b, a, 2026)
+    assert len(f) == 5
+    assert list(f.index) == [2026, 2027, 2028, 2029, 2030]
+
+    # Verify Terminal Value discounted across exactly 5 periods
+    r = dcf(f, b, a, 8)
+    expected_pv_terminal = r["terminal_value"] / (1 + a.wacc) ** 5
+    assert r["pv_terminal"] == pytest.approx(expected_pv_terminal)
+    assert r["price"] > 0

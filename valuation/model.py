@@ -87,11 +87,18 @@ def base_check(b):
 
 
 def default_drivers(a, first_year):
+    # 5-Year Explicit Forecast Horizon (Years 1-3 Operational Momentum, Years 4-5 Convergence)
+    growth_y4 = a.growth * (2.0 / 3.0) + a.mature_growth * (1.0 / 3.0)
+    growth_y5 = a.mature_growth
+
+    margin_y4 = a.ebit_margin * (2.0 / 3.0) + a.mature_margin * (1.0 / 3.0)
+    margin_y5 = a.mature_margin
+
     return pd.DataFrame({
-        "Year": range(first_year, first_year + 10),
-        "Growth %": [100 * a.growth] * 5 + list(np.linspace(a.growth, a.mature_growth, 6)[1:] * 100),
-        "EBIT margin %": [100 * a.ebit_margin] * 5 + list(np.linspace(a.ebit_margin, a.mature_margin, 6)[1:] * 100),
-        "Capex / sales %": [100 * a.capex_pct] * 10,
+        "Year": range(first_year, first_year + 5),
+        "Growth %": [100 * a.growth, 100 * a.growth, 100 * a.growth, 100 * growth_y4, 100 * growth_y5],
+        "EBIT margin %": [100 * a.ebit_margin, 100 * a.ebit_margin, 100 * a.ebit_margin, 100 * margin_y4, 100 * margin_y5],
+        "Capex / sales %": [100 * a.capex_pct] * 5,
     })
 
 
@@ -184,8 +191,8 @@ def infer_assumptions(historical, b, company=None):
             blume_beta = 0.67 * raw_beta + 0.33
             a.beta = round(max(0.65, blume_beta), 4)
 
-    # Terminal state: Year 10 mature growth converges to terminal growth
-    a.mature_growth = a.terminal_growth
+    # Year 5 mature growth: smooth convergence midpoint toward perpetual terminal growth
+    a.mature_growth = round((a.growth + a.terminal_growth) / 2.0, 4)
 
     return a
 
@@ -205,8 +212,8 @@ def forecast(b, a, first_year, drivers=None):
     if min(a.ar_days, a.inventory_days, a.ap_days, a.annual_repayment, a.depreciation_rate) < 0:
         raise ValueError("Days, repayments, and depreciation cannot be negative.")
     d = default_drivers(a, first_year) if drivers is None else drivers.copy()
-    if len(d) != 10 or list(d["Year"]) != list(range(first_year, first_year + 10)):
-        raise ValueError("The forecast needs exactly 10 consecutive annual periods.")
+    if len(d) != 5 or list(d["Year"]) != list(range(first_year, first_year + 5)):
+        raise ValueError("The forecast needs exactly 5 consecutive annual periods.")
     if not np.isfinite(d.to_numpy(dtype=float)).all():
         raise ValueError("Annual assumptions cannot be blank or non-finite.")
     if (d["Growth %"] <= -100).any() or (d["Capex / sales %"] < 0).any():
@@ -323,7 +330,7 @@ def dcf(f, b, a, shares):
 
     terminal_nopat = float(f.iloc[-1].ebit) * (1 - a.tax_rate) * (1 + g)
     if terminal_nopat <= 0:
-        raise ValueError("Year 10 operating profit must be positive for this terminal-value method.")
+        raise ValueError("Year 5 operating profit must be positive for this terminal-value method.")
 
     # Damodaran Sustainable Terminal Reinvestment = g / ROIC (Week 2 Slide 55)
     terminal_reinvestment_rate = (g / a.terminal_roic) if a.terminal_roic > 0 else 0.0
@@ -335,14 +342,14 @@ def dcf(f, b, a, shares):
 
     # Damodaran Enterprise-to-Equity Value Bridge (Week 2 Slide 63)
     eq = ev + b["cash"] + a.nonoperating_assets - b["short_debt"] - b["long_debt"] - a.other_claims
-    y10_ebitda = float(f.iloc[-1].ebitda)
+    y_exit_ebitda = float(f.iloc[-1].ebitda)
 
     return dict(
         wacc=w, terminal_nopat=terminal_nopat, terminal_reinvestment_rate=terminal_reinvestment_rate,
         terminal_fcff=terminal_fcff, terminal_value=terminal_value,
         pv_flows=pv_flows, pv_terminal=pv_terminal, enterprise_value=ev,
         equity_value=eq, price=eq / shares, terminal_share=pv_terminal / ev if ev else 0,
-        implied_exit_ev_ebitda=(terminal_value / y10_ebitda) if y10_ebitda > 0 else float("nan")
+        implied_exit_ev_ebitda=(terminal_value / y_exit_ebitda) if y_exit_ebitda > 0 else float("nan")
     )
 
 
