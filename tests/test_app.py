@@ -83,3 +83,8 @@ def test_format_wib_retrieval_and_badge_rendering():
     assert "retrieval-badge" in rendered_markdown
     assert "Retrieved Data:" in rendered_markdown
     assert "From :" in rendered_markdown
+
+    # 5. Verify company fetched_at is dynamic and non-empty
+    active_co = app.session_state.company
+    assert "fetched_at" in active_co
+    assert str(active_co["fetched_at"]).startswith("202")

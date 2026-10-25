@@ -1,4 +1,5 @@
 from dataclasses import asdict, replace
+from datetime import datetime, timezone, timedelta
 from html import escape
 import importlib
 import json
@@ -757,16 +758,24 @@ def get_company(symbol):
 
 
 def activate(company, saved=None):
-    if company and not company.get("demo") and company.get("symbol"):
-        idx_meta = get_company_idx_metadata(company["symbol"])
-        if idx_meta:
-            company["sector"] = idx_meta["sector"]
-            company["industry"] = idx_meta["sub_industry"]
-            company["name"] = idx_meta["name"]
+    if company:
+        company = dict(company)
+        # Ensure retrieval timestamp is dynamically refreshed on user load
+        if not saved and not company.get("demo"):
+            company["fetched_at"] = datetime.now(timezone.utc).isoformat()
+        elif not company.get("fetched_at"):
+            company["fetched_at"] = datetime.now(timezone.utc).isoformat()
+
+        if not company.get("demo") and company.get("symbol"):
+            idx_meta = get_company_idx_metadata(company["symbol"])
+            if idx_meta:
+                company["sector"] = idx_meta["sector"]
+                company["industry"] = idx_meta["sub_industry"]
+                company["name"] = idx_meta["name"]
     st.session_state.company = company
     st.session_state.revision = st.session_state.get("revision", 0) + 1
     st.session_state.saved_inputs = saved or {}
-    if company.get("demo"):
+    if company and company.get("demo"):
         st.session_state.peer_companies = demo_peers()
         st.session_state.peer_errors = []
     else:
@@ -883,7 +892,12 @@ with st.sidebar:
         if symbol:
             try:
                 with st.spinner(f"Loading annual financial statements for {symbol.upper()}…"):
-                    activate(get_company(ticker_symbol(symbol)))
+                    target_sym = ticker_symbol(symbol)
+                    try:
+                        co = fetch_company(target_sym)
+                    except Exception:
+                        co = get_company(target_sym)
+                    activate(co)
                     st.rerun()
             except Exception as exc:
                 st.error(f"Could not load company '{symbol}': {exc}")
