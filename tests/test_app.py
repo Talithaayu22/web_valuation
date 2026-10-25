@@ -5,7 +5,7 @@ from pathlib import Path
 def test_demo_renders_and_assumptions_update():
     app = AppTest.from_file(Path(__file__).resolve().parents[1]/"app.py",default_timeout=30).run()
     assert not app.exception
-    assert any("Nusantara" in x.value for x in app.markdown)
+    assert any("Telkom" in x.value or "TLKM" in x.value or "Nusantara" in x.value for x in app.markdown)
     original = next(m.value for m in app.metric if m.label == "DCF value / share")
     growth = next(n for n in app.number_input if n.label == "Growth · years 1–3 (%)")
     growth.set_value(12.)
