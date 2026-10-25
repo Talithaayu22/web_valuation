@@ -511,11 +511,14 @@ IDX_INDUSTRY_PEERS = {
     "Farm Products": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP", "BWPT", "SSMS"],
     "Agricultural Inputs": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP"],
     # Telecom Services (IDX-IC Industry Group J3: Telecommunication Services)
-    "Integrated Telecommunication Service": ["ISAT", "EXCL", "TOWR", "TBIG", "MTEL"],
-    "Wireless Telecommunication Services": ["ISAT", "EXCL", "TLKM", "TOWR", "TBIG", "MTEL"],
+    # Operating Mobile & Integrated Telecom Carriers (excluding tower infrastructure companies)
+    "Integrated Telecommunication Service": ["ISAT", "EXCL", "LINK", "MORA"],
+    "Wireless Telecommunication Services": ["ISAT", "EXCL", "TLKM", "LINK", "MORA"],
     "Wired Telecommunication Service": ["LINK", "MORA", "TLKM", "ISAT", "EXCL"],
-    "Telecommunication Services": ["TLKM", "ISAT", "EXCL", "TOWR", "TBIG", "MTEL"],
-    "Telecom Services": ["TLKM", "ISAT", "EXCL", "TOWR", "TBIG", "MTEL"],
+    "Telecommunication Services": ["TLKM", "ISAT", "EXCL", "LINK", "MORA"],
+    "Telecom Services": ["TLKM", "ISAT", "EXCL", "LINK", "MORA"],
+    # Telecommunication Tower Infrastructure (Separated from operating carriers)
+    "Telecommunication Towers": ["TOWR", "TBIG", "MTEL", "CENT", "IBST"],
 }
 
 
@@ -524,7 +527,7 @@ def get_default_peers_for_ticker(symbol, industry=None):
     Industry/Sub-industry is sourced strictly from 'book/Company LIsted on IDX.xlsx'.
     For singleton or small sub-industries (such as TLKM's 'Integrated Telecommunication Service'),
     peers are matched with sibling companies within the same official 2-digit IDX-IC Industry Group
-    (e.g. 'J3' Telecommunication Services: ISAT, EXCL, TOWR, TBIG, MTEL), strictly avoiding
+    (e.g. 'J3' Telecommunication Services: ISAT, EXCL, LINK, MORA), strictly avoiding
     unrelated sub-industries like Toll Roads or Airports.
     """
     clean = symbol.replace(".JK", "").upper()
@@ -586,6 +589,17 @@ def get_default_peers_for_ticker(symbol, industry=None):
             if t != clean and t not in seen:
                 candidates.append(t)
                 seen.add(t)
+
+    # Tower infrastructure tickers vs Operating telecom carrier tickers:
+    # Operating telecom operators (TLKM, ISAT, EXCL, LINK, MORA) must not be mixed with
+    # tower infrastructure companies (TOWR, TBIG, MTEL), as tower business models
+    # (10Y master lease agreements, ~85% EBITDA margins, real-estate EV/EBITDA multiples)
+    # fundamentally distort operating carrier relative valuations.
+    tower_infra_tickers = {"TOWR", "TBIG", "MTEL", "CENT", "IBST", "BALI", "GHON", "SUPR"}
+    if clean in ("TLKM", "ISAT", "EXCL", "LINK", "MORA"):
+        candidates = [t for t in candidates if t not in tower_infra_tickers]
+    elif clean in tower_infra_tickers:
+        candidates = [t for t in candidates if t not in {"TLKM", "ISAT", "EXCL", "LINK", "MORA"}]
 
     return candidates
 
