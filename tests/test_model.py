@@ -1065,3 +1065,29 @@ def test_damodaran_plantations_and_crops_cyclical_detection():
     cagr = (10050.0 / 10000.0)**(1/3) - 1.0
     assert a_food.growth == pytest.approx(cagr)
     assert a_food.growth < 0.01
+
+
+def test_statement_shares_fallback_when_info_empty(monkeypatch):
+    import yfinance as yf
+    from valuation.data import fetch_company
+
+    # Mock yf.Ticker to simulate Yahoo Finance throttling info on cloud
+    class MockTicker:
+        def __init__(self, sym, session=None):
+            self.fast_info = type("FI", (), {"last_price": 2240.0, "shares": 98580940800, "market_cap": 220821307392000.0})()
+        def get_info(self):
+            return {}
+        def get_income_stmt(self, freq="yearly"):
+            return pd.DataFrame({"2025-12-31": {"revenue": 150000.0, "cogs": 100000.0, "opex": 20000.0, "da": 10000.0, "interest": 3000.0, "tax": 3000.0, "net_income": 14000.0, "DilutedAverageShares": 99061024659.0}})
+        def get_balance_sheet(self, freq="yearly"):
+            return pd.DataFrame({"2025-12-31": {"cash": 30000.0, "ar": 10000.0, "inventory": 5000.0, "other_ca": 2000.0, "ppe": 120000.0, "other_assets": 10000.0, "ap": 15000.0, "other_cl": 5000.0, "short_debt": 5000.0, "long_debt": 40000.0, "other_liabilities": 10000.0, "equity": 102000.0, "OrdinarySharesNumber": 99053271200.0}})
+        def get_cashflow(self, freq="yearly"):
+            return pd.DataFrame({"2025-12-31": {"ebit": 20000.0, "ebitda": 30000.0, "cfo": 25000.0, "capex": 20000.0}})
+        def history(self, period="5d"):
+            return pd.DataFrame({"Close": [2240.0]})
+
+    monkeypatch.setattr(yf, "Ticker", MockTicker)
+    res = fetch_company("TLKM.JK")
+    assert res["shares"] is not None
+    assert res["shares"] > 90e9
+    assert res["price"] == 2240.0

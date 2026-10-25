@@ -341,7 +341,14 @@ def fetch_company(symbol):
     official_sector = idx_meta["sector"] if idx_meta else info.get("sector", "Unknown")
     official_industry = idx_meta["sub_industry"] if idx_meta else info.get("industry", "Unknown")
 
-    cur_price = number(info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose") or (getattr(t, "fast_info", None) and getattr(t.fast_info, "get", lambda _: None)("lastPrice")))
+    fast_info = getattr(t, "fast_info", None)
+    cur_price = number(
+        info.get("currentPrice") or
+        info.get("regularMarketPrice") or
+        info.get("previousClose") or
+        getattr(fast_info, "last_price", None) or
+        (fast_info and getattr(fast_info, "get", lambda _: None)("lastPrice"))
+    )
     if cur_price is None or cur_price <= 0:
         try:
             h = t.history(period="5d")
@@ -350,8 +357,32 @@ def fetch_company(symbol):
         except Exception:
             pass
 
-    cur_shares = number(info.get("sharesOutstanding"))
-    cur_mkt_cap = number(info.get("marketCap"))
+    cur_shares = number(
+        info.get("sharesOutstanding") or
+        info.get("impliedSharesOutstanding") or
+        getattr(fast_info, "shares", None)
+    )
+    if cur_shares is None or cur_shares <= 0:
+        # Extract from audited balance sheet
+        for row in ("OrdinarySharesNumber", "ShareIssued"):
+            if balance is not None and not balance.empty and row in balance.index and not balance.loc[row].dropna().empty:
+                val = number(balance.loc[row].dropna().iloc[-1])
+                if val and val > 0:
+                    cur_shares = float(val)
+                    break
+        # Extract from audited income statement
+        if cur_shares is None or cur_shares <= 0:
+            for row in ("DilutedAverageShares", "BasicAverageShares"):
+                if income is not None and not income.empty and row in income.index and not income.loc[row].dropna().empty:
+                    val = number(income.loc[row].dropna().iloc[-1])
+                    if val and val > 0:
+                        cur_shares = float(val)
+                        break
+
+    cur_mkt_cap = number(
+        info.get("marketCap") or
+        getattr(fast_info, "market_cap", None)
+    )
     if (cur_mkt_cap is None or cur_mkt_cap <= 0) and cur_price and cur_shares:
         cur_mkt_cap = cur_price * cur_shares
     elif (cur_shares is None or cur_shares <= 0) and cur_price and cur_mkt_cap and cur_price > 0:

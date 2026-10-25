@@ -805,7 +805,31 @@ with data_tab:
     # Market & Reference Observation Inputs placed prominently alongside company profile
     col1, col2 = st.columns(2)
     with col1:
-        shares = st.number_input("Current / diluted shares outstanding (billions)", min_value=0., value=float(saved.get("shares", (c["shares"] or 0) / BILLION)), key=key("shares"), format="%.6f")
+        default_shares_val = (c.get("shares") or 0) / BILLION
+        if default_shares_val <= 0:
+            raw_dict = c.get("raw", {})
+            bs_raw = raw_dict.get("Balance sheet")
+            inc_raw = raw_dict.get("Income statement")
+            if bs_raw is not None and not bs_raw.empty:
+                for row in ("OrdinarySharesNumber", "ShareIssued"):
+                    if row in bs_raw.index and not bs_raw.loc[row].dropna().empty:
+                        default_shares_val = float(bs_raw.loc[row].dropna().iloc[-1]) / BILLION
+                        break
+            if default_shares_val <= 0 and inc_raw is not None and not inc_raw.empty:
+                for row in ("DilutedAverageShares", "BasicAverageShares"):
+                    if row in inc_raw.index and not inc_raw.loc[row].dropna().empty:
+                        default_shares_val = float(inc_raw.loc[row].dropna().iloc[-1]) / BILLION
+                        break
+
+        shares_init = float(saved.get("shares", default_shares_val if default_shares_val > 0 else 1.0))
+        shares = st.number_input(
+            "Current / diluted shares outstanding (billions)",
+            min_value=0.000001,
+            value=max(0.000001, shares_init),
+            key=key("shares"),
+            format="%.6f",
+            help="Diluted share count in billions. Sourced from audited balance sheet / latest market filing."
+        )
     with col2:
         price = st.number_input("Reference market price (IDR/share)", min_value=0., value=float(saved.get("price", c["price"] or 0)), key=key("price"))
 
