@@ -1,3 +1,15 @@
+---
+title: Nusa IDX Valuation Lab
+emoji: 📊
+colorFrom: green
+colorTo: gray
+sdk: streamlit
+sdk_version: 1.40.0
+app_file: app.py
+pinned: false
+license: mit
+---
+
 # Nusa — IDX Valuation Lab
 
 A local Python/Streamlit equity research and 3-statement valuation workspace for Indonesian Stock Exchange (IDX) listed operating companies.
