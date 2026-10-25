@@ -45,15 +45,10 @@ BILLION = 1e9
 
 
 @functools.lru_cache(maxsize=1)
-def load_idx_company_registry():
-    """Loads and caches official IDX listed company metadata from the repository Excel file:
-    'book/Company LIsted on IDX.xlsx'.
-    Only Sector, Sub-Industry, and official Stock Name are sourced here.
-    Financial data continues to be retrieved from yfinance.
-    """
+def _load_idx_registry_data():
     excel_path = Path(__file__).resolve().parent.parent / "book" / "Company LIsted on IDX.xlsx"
     if not excel_path.exists():
-        return {}, {}, {}
+        return {}, {}, {}, {}
     try:
         df = pd.read_excel(excel_path, header=3)
         df = df.dropna(subset=["Code"])
@@ -61,34 +56,60 @@ def load_idx_company_registry():
         df["Sector"] = df["Sector"].astype(str).str.strip()
         df["Sub Industry"] = df["Sub Industry"].astype(str).str.strip()
         df["Stock Name"] = df["Stock Name"].astype(str).str.strip()
+        if "Sub Industry Code" in df.columns:
+            df["Sub Industry Code"] = df["Sub Industry Code"].astype(str).str.strip().str.upper()
+        else:
+            df["Sub Industry Code"] = ""
 
         ticker_map = {}
         sub_ind_map = {}
         sector_map = {}
+        group_map = {}
 
         for _, row in df.iterrows():
             code = row["Code"]
             sec = row["Sector"]
             sub = row["Sub Industry"]
             name = row["Stock Name"]
+            sub_code = str(row.get("Sub Industry Code", "") or "").strip().upper()
+            group_code = sub_code[:2] if len(sub_code) >= 2 else ""
 
             ticker_map[code] = {
                 "code": code,
                 "name": name,
                 "sector": sec,
                 "sub_industry": sub,
+                "sub_industry_code": sub_code,
+                "group_code": group_code,
             }
             if sub not in sub_ind_map:
                 sub_ind_map[sub] = []
             sub_ind_map[sub].append(code)
 
+            if group_code:
+                if group_code not in group_map:
+                    group_map[group_code] = []
+                group_map[group_code].append(code)
+
             if sec not in sector_map:
                 sector_map[sec] = []
             sector_map[sec].append(code)
 
-        return ticker_map, sub_ind_map, sector_map
+        return ticker_map, sub_ind_map, sector_map, group_map
     except Exception:
-        return {}, {}, {}
+        return {}, {}, {}, {}
+
+
+def load_idx_company_registry(include_groups=False):
+    """Loads and caches official IDX listed company metadata from the repository Excel file:
+    'book/Company LIsted on IDX.xlsx'.
+    Only Sector, Sub-Industry, Sub-Industry Code, and official Stock Name are sourced here.
+    Financial data continues to be retrieved from yfinance.
+    """
+    t_map, s_map, sec_map, g_map = _load_idx_registry_data()
+    if include_groups:
+        return t_map, s_map, sec_map, g_map
+    return t_map, s_map, sec_map
 
 
 def get_company_idx_metadata(symbol):
@@ -420,48 +441,82 @@ IDX_INDUSTRY_PEERS = {
     "Plantations & Crops": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP", "BWPT", "SSMS"],
     "Farm Products": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP", "BWPT", "SSMS"],
     "Agricultural Inputs": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP"],
-    # Telecom Services
-    "Integrated Telecommunication Service": ["TLKM", "ISAT", "EXCL"],
-    "Wireless Telecommunication Services": ["TLKM", "ISAT", "EXCL"],
-    "Telecom Services": ["TLKM", "ISAT", "EXCL"],
+    # Telecom Services (IDX-IC Industry Group J3: Telecommunication Services)
+    "Integrated Telecommunication Service": ["ISAT", "EXCL", "TOWR", "TBIG", "MTEL"],
+    "Wireless Telecommunication Services": ["ISAT", "EXCL", "TLKM", "TOWR", "TBIG", "MTEL"],
+    "Wired Telecommunication Service": ["LINK", "MORA", "TLKM", "ISAT", "EXCL"],
+    "Telecommunication Services": ["TLKM", "ISAT", "EXCL", "TOWR", "TBIG", "MTEL"],
+    "Telecom Services": ["TLKM", "ISAT", "EXCL", "TOWR", "TBIG", "MTEL"],
 }
 
 
 def get_default_peers_for_ticker(symbol, industry=None):
     """Returns candidate peer tickers for a given symbol based on official IDX sub-industry mapping.
     Industry/Sub-industry is sourced strictly from 'book/Company LIsted on IDX.xlsx'.
+    For singleton or small sub-industries (such as TLKM's 'Integrated Telecommunication Service'),
+    peers are matched with sibling companies within the same official 2-digit IDX-IC Industry Group
+    (e.g. 'J3' Telecommunication Services: ISAT, EXCL, TOWR, TBIG, MTEL), strictly avoiding
+    unrelated sub-industries like Toll Roads or Airports.
     """
     clean = symbol.replace(".JK", "").upper()
-    ticker_map, sub_ind_map, sector_map = load_idx_company_registry()
+    ticker_map, sub_ind_map, sector_map, group_map = load_idx_company_registry(include_groups=True)
 
     candidates = []
-    # 1. Official IDX Sub-Industry matching (strictly from repository IDX Excel)
-    if clean in ticker_map:
-        sub_ind = ticker_map[clean]["sub_industry"]
-        all_in_sub = [t for t in sub_ind_map.get(sub_ind, []) if t != clean]
-        if all_in_sub:
-            # Prioritize prominent curated benchmark peers within the same official sub-industry
-            curated = [t for t in IDX_INDUSTRY_PEERS.get(sub_ind, []) if t in all_in_sub]
-            rest = [t for t in all_in_sub if t not in curated]
-            candidates = curated + rest
-        else:
-            # Fallback to broader official Sector if sub-industry has no other peers
-            sec = ticker_map[clean]["sector"]
-            candidates = [t for t in sector_map.get(sec, []) if t != clean]
+    seen = set()
 
-    # 2. Check by provided industry or ticker in predefined clusters if not in registry
-    if not candidates:
-        if industry and industry in IDX_INDUSTRY_PEERS:
-            candidates = [t for t in IDX_INDUSTRY_PEERS[industry] if t != clean]
-        else:
-            for group in IDX_INDUSTRY_PEERS.values():
-                if clean in group:
-                    candidates = [t for t in group if t != clean]
-                    break
+    # Look up metadata from registry
+    target_meta = ticker_map.get(clean, {})
+    sub_ind = target_meta.get("sub_industry") or industry
+    group_code = target_meta.get("group_code", "")
+    sec = target_meta.get("sector", "")
 
-    # 3. Default fallbacks within energy / general if none matched
+    # Priority 1: Curated peers directly matching sub-industry or ticker
+    curated_candidates = []
+    if sub_ind and sub_ind in IDX_INDUSTRY_PEERS:
+        curated_candidates.extend(IDX_INDUSTRY_PEERS[sub_ind])
+
+    for group in IDX_INDUSTRY_PEERS.values():
+        if clean in group:
+            for t in group:
+                if t != clean and t not in curated_candidates:
+                    curated_candidates.append(t)
+
+    for t in curated_candidates:
+        if t != clean and t not in seen:
+            candidates.append(t)
+            seen.add(t)
+
+    # Priority 2: Candidates in the exact same Sub-Industry
+    same_sub = [t for t in sub_ind_map.get(sub_ind, []) if t != clean]
+    for t in same_sub:
+        if t not in seen:
+            candidates.append(t)
+            seen.add(t)
+
+    # Priority 3: Sibling peers within the official 2-digit IDX-IC Industry Group (e.g. 'J3' Telecommunication Services).
+    # Essential for singleton or small sub-industries (like TLKM's Integrated Telecommunication Service)
+    # so they pair with genuine industry peers rather than falling back to unrelated sector sub-industries.
+    if group_code:
+        sibling_group_peers = [t for t in group_map.get(group_code, []) if t != clean]
+        for t in sibling_group_peers:
+            if t not in seen:
+                candidates.append(t)
+                seen.add(t)
+
+    # Priority 4: Fallback to broader Sector only if no sub-industry or industry-group peers exist at all
+    if len(candidates) < 2 and sec:
+        sec_peers = [t for t in sector_map.get(sec, []) if t != clean]
+        for t in sec_peers:
+            if t not in seen:
+                candidates.append(t)
+                seen.add(t)
+
+    # Priority 5: Default fallbacks within general blue chips if none matched
     if not candidates:
-        candidates = [t for t in ["ADRO", "PTBA", "ITMG", "AKRA", "PGAS"] if t != clean]
+        for t in ["ISAT", "EXCL", "ADRO", "PTBA", "AKRA", "PGAS"]:
+            if t != clean and t not in seen:
+                candidates.append(t)
+                seen.add(t)
 
     return candidates
 

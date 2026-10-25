@@ -1060,6 +1060,14 @@ if tot_mult_w > 0:
 else:
     mult_weights_norm = {k: 0.25 for k in mult_weights_raw}
 
+# Track active target ticker to ensure peer set stays aligned with target issuer
+clean_current_target = c["symbol"].replace(".JK", "").upper()
+if st.session_state.get("_active_target_ticker") != clean_current_target:
+    st.session_state["_active_target_ticker"] = clean_current_target
+    if not c.get("demo"):
+        st.session_state.pop("peer_companies", None)
+        st.session_state.pop("peer_errors", None)
+
 # Auto-initialize peers in session state if missing
 if "peer_companies" not in st.session_state or st.session_state.peer_companies is None:
     if c.get("demo"):
@@ -1655,10 +1663,12 @@ with peers_tab:
         # Build interactive peer inclusion controls and display table
         table_rows = []
         # Target row as benchmark
+        target_sub_ind = c.get("industry") or (get_company_idx_metadata(c["symbol"]) or {}).get("sub_industry", "—")
         table_rows.append({
-            "Active": "🎯 TARGET",
+            "Active": "TARGET",
             "Ticker": c["symbol"],
             "Company Name": clean_company_name(c["name"]),
+            "Sub-Industry": target_sub_ind,
             "EBITDA Margin": f"{target_profile['ebitda_margin']:.1%}",
             "DER (D/E)": f"{target_profile['der']:.2f}x",
             "Similarity & Confidence": "100/100 (Benchmark)",
@@ -1690,11 +1700,13 @@ with peers_tab:
             dist_val = r_info.get("similarity_distance", 0.0)
             score_val = r_info.get("similarity_score", 100)
             conf_val = r_info.get("confidence_level", "High")
+            p_sub_ind = pc.get("industry") or (get_company_idx_metadata(sym) or {}).get("sub_industry", "—")
 
             table_rows.append({
-                "Active": "✅ INCLUDED" if is_inc else "❌ EXCLUDED",
+                "Active": "INCLUDED" if is_inc else "EXCLUDED",
                 "Ticker": sym,
                 "Company Name": clean_company_name(pc["name"]),
+                "Sub-Industry": p_sub_ind,
                 "EBITDA Margin": f"{m_val:.1%}" if m_val is not None else "—",
                 "DER (D/E)": f"{der_val:.2f}x" if der_val is not None else "—",
                 "Similarity & Confidence": f"{score_val}/100 ({conf_val} Confidence)",

@@ -1018,6 +1018,27 @@ def test_official_idx_excel_registry_and_peer_matching():
     unvr_peers = get_default_peers_for_ticker("UNVR.JK")
     assert "SIDO" not in unvr_peers
 
+    # TLKM (Telkom) is classified under singleton sub-industry 'Integrated Telecommunication Service' (J312).
+    # Its peers must be genuine telecommunication services (ISAT, EXCL, TOWR, TBIG, MTEL) from 2-digit group J3,
+    # and MUST NOT contain unrelated infrastructure companies like airport baggage (CASS, GMFI),
+    # toll roads (CMNP, JSMR), or car terminals (IPCC).
+    tlkm_meta = get_company_idx_metadata("TLKM")
+    assert tlkm_meta is not None
+    assert tlkm_meta["sector"] == "Infrastructures"
+    assert tlkm_meta["sub_industry"] == "Integrated Telecommunication Service"
+    assert tlkm_meta["group_code"] == "J3"
+
+    tlkm_peers = get_default_peers_for_ticker("TLKM.JK")
+    assert "ISAT" in tlkm_peers
+    assert "EXCL" in tlkm_peers
+    assert "TOWR" in tlkm_peers
+    assert "TBIG" in tlkm_peers
+    assert "CASS" not in tlkm_peers
+    assert "CMNP" not in tlkm_peers
+    assert "GMFI" not in tlkm_peers
+    assert "IPCC" not in tlkm_peers
+    assert "JSMR" not in tlkm_peers
+
 
 
 
