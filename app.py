@@ -790,7 +790,7 @@ with valuation_lab_tab:
     ])
 
 with data_tab:
-    st.subheader("5.1 Company & Data Review")
+    st.subheader("Company & Data Review")
     fx = 1.0
     if c["financial_currency"] != "IDR":
         suggested_fx = float(c.get("suggested_fx", 16000.0 if c["financial_currency"] == "USD" else 1.0))
