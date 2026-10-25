@@ -44,3 +44,15 @@ def test_valuation_assumptions_tab_renders_three_pillars():
     assert "03 · Valuation policy" in markdown_texts
     assert any(m.label == "Calculated WACC" for m in app.metric)
     assert any(m.label == "Cost of Equity" for m in app.metric)
+
+
+def test_app_resilience_with_missing_market_quotes():
+    app = AppTest.from_file(Path(__file__).resolve().parents[1]/"app.py", default_timeout=30).run()
+    assert not app.exception
+    # Set price to 0 to simulate missing/unavailable market quote
+    price_input = next(n for n in app.number_input if n.label == "Reference market price (IDR/share)")
+    price_input.set_value(0.0)
+    app.run()
+    assert not app.exception
+    obs_metric = next(m.value for m in app.metric if m.label == "Observed Reference Market Price")
+    assert obs_metric == "Not available"

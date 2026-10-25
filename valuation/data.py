@@ -341,6 +341,22 @@ def fetch_company(symbol):
     official_sector = idx_meta["sector"] if idx_meta else info.get("sector", "Unknown")
     official_industry = idx_meta["sub_industry"] if idx_meta else info.get("industry", "Unknown")
 
+    cur_price = number(info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose") or (getattr(t, "fast_info", None) and getattr(t.fast_info, "get", lambda _: None)("lastPrice")))
+    if cur_price is None or cur_price <= 0:
+        try:
+            h = t.history(period="5d")
+            if h is not None and not h.empty and "Close" in h.columns and not h["Close"].dropna().empty:
+                cur_price = float(h["Close"].dropna().iloc[-1])
+        except Exception:
+            pass
+
+    cur_shares = number(info.get("sharesOutstanding"))
+    cur_mkt_cap = number(info.get("marketCap"))
+    if (cur_mkt_cap is None or cur_mkt_cap <= 0) and cur_price and cur_shares:
+        cur_mkt_cap = cur_price * cur_shares
+    elif (cur_shares is None or cur_shares <= 0) and cur_price and cur_mkt_cap and cur_price > 0:
+        cur_shares = cur_mkt_cap / cur_price
+
     return dict(
         symbol=symbol,
         name=official_name,
@@ -349,10 +365,10 @@ def fetch_company(symbol):
         financial_currency=fin_curr,
         price_currency=price_curr,
         suggested_fx=suggested_fx,
-        price=number(info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose") or (getattr(t, "fast_info", None) and getattr(t.fast_info, "get", lambda _: None)("lastPrice"))),
-        shares=number(info.get("sharesOutstanding")),
+        price=cur_price,
+        shares=cur_shares,
         beta=beta,
-        market_cap=number(info.get("marketCap")),
+        market_cap=cur_mkt_cap,
         fetched_at=datetime.now(timezone.utc).isoformat(),
         historical=historical,
         provenance=provenance,

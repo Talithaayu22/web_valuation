@@ -613,6 +613,57 @@ def unpack_company(c):
     return out
 
 
+def fmt_idr(val, prefix="Rp ", default="—", allow_negative=False):
+    """Format numeric value as IDR string safely handling None, NaN, and infinity."""
+    if val is None or not pd.notna(val):
+        return default
+    try:
+        fval = float(val)
+        if not math.isfinite(fval):
+            return default
+        if not allow_negative and fval <= 0:
+            return default
+        return f"{prefix}{fval:,.0f}"
+    except (TypeError, ValueError):
+        return default
+
+
+def fmt_pct(val, decimals=1, signed=False, default="—"):
+    """Format numeric value as percentage safely handling None, NaN, and infinity."""
+    if val is None or not pd.notna(val):
+        return default
+    try:
+        fval = float(val)
+        if not math.isfinite(fval):
+            return default
+        sign = "+" if signed else ""
+        return f"{fval:{sign}.{decimals}%}"
+    except (TypeError, ValueError):
+        return default
+
+
+def fmt_shares(val, default="—"):
+    """Format share count safely in billions."""
+    if val is None or not pd.notna(val):
+        return default
+    try:
+        fval = float(val)
+        return f"{fval:,.3f} bn" if math.isfinite(fval) else default
+    except (TypeError, ValueError):
+        return default
+
+
+def fmt_multiple(val, decimals=2, suffix="x", default="—"):
+    """Format multiple safely (e.g. 12.34x)."""
+    if val is None or not pd.notna(val):
+        return default
+    try:
+        fval = float(val)
+        return f"{fval:.{decimals}f}{suffix}" if math.isfinite(fval) else default
+    except (TypeError, ValueError):
+        return default
+
+
 def chart(fig, ytitle="IDR billion"):
     fig.update_layout(
         template="plotly_white", height=350, margin=dict(l=10, r=10, t=25, b=15),
@@ -627,7 +678,11 @@ def chart(fig, ytitle="IDR billion"):
 
 if "company" not in st.session_state:
     try:
-        activate(get_company(ticker_symbol("TLKM")))
+        init_c = get_company(ticker_symbol("TLKM"))
+        if not init_c or init_c.get("historical") is None or init_c["historical"].empty:
+            activate(demo_company())
+        else:
+            activate(init_c)
     except Exception:
         activate(demo_company())
 
@@ -1530,10 +1585,14 @@ with overview:
     st.subheader("Executive Valuation Overview")
 
     # 1. Investment Summary & Decision Hero Row (Level 1 — Decision)
+    rec_up_val = rec.get("upside")
+    rec_mos_val = rec.get("margin_of_safety")
+    rec_up_str = fmt_pct(rec_up_val, signed=True)
+    rec_mos_str = fmt_pct(rec_mos_val)
     upside_str = (
         f"""<span style="font-size: 14px; color: #B91C1C;">Capital Structure: <b>Negative Intrinsic Equity (Insolvent / Restructuring Risk)</b></span>"""
         if rec["rating"] == "NOT ELIGIBLE" else
-        f"""<span style="font-size: 15px; color: #1D1D1F;">Implied Upside: <b>{rec['upside']:+.1%}</b> &nbsp;|&nbsp; Margin of Safety: <b>{rec['margin_of_safety']:.1%}</b> &nbsp;|&nbsp; Fair-Value Range: <b>{fair_value_range_str}</b></span>"""
+        f"""<span style="font-size: 15px; color: #1D1D1F;">Implied Upside: <b>{rec_up_str}</b> &nbsp;|&nbsp; Margin of Safety: <b>{rec_mos_str}</b> &nbsp;|&nbsp; Fair-Value Range: <b>{fair_value_range_str}</b></span>"""
     )
     rec_col, dl_col = st.columns([3.8, 1.4], vertical_alignment="center")
     with rec_col:
@@ -1574,7 +1633,7 @@ with overview:
         st.warning(
             f"**Valuation Eligibility Notice: {clean_name} ({c['symbol']}) is Not Eligible for Automated Valuation**\n\n"
             f"Automated DCF modeling is suspended for this ticker under trailing audited statements because:\n\n"
-            f"1. **Severe Balance Sheet Debt Overhang**: Total balance sheet debt (Rp {tot_debt:,.1f} bn) exceeds operating enterprise value (Rp {ev_val:,.1f} bn), resulting in underwater intrinsic equity (Rp {dcf_p:,.0f}/share).\n"
+            f"1. **Severe Balance Sheet Debt Overhang**: Total balance sheet debt (Rp {tot_debt:,.1f} bn) exceeds operating enterprise value (Rp {ev_val:,.1f} bn), resulting in underwater intrinsic equity ({fmt_idr(dcf_p, default='N/A')}/share).\n"
             f"2. **Pre-Revenue Capital Project Timing**: Debt was drawn for multi-billion dollar construction (e.g. smelter expansion), but expanded commercial revenues are not yet online in historical data.\n"
             f"3. **Missing D&A Reporting**: Source statements report zero D&A, penalizing cash flows by the entire capex without non-cash depreciation addbacks.\n\n"
             f"*Valuing this company requires excessive speculative forecasting (forward production ramp-up schedules and commodity pricing) rather than reliable fundamental extrapolation.*"
@@ -1584,14 +1643,14 @@ with overview:
     kpi_r1_1, kpi_r1_2, kpi_r1_3 = st.columns(3)
     kpi_r1_1.metric(
         "Central Blended Fair Value / Share",
-        f"Rp {effective_price:,.0f}" if (effective_price and pd.notna(effective_price) and effective_price > 0) else ("Not eligible" if is_dcf_ineligible else "Not available"),
-        delta=f"{rec['upside']:+.1%} vs market" if (rec["rating"] != "NOT ELIGIBLE" and pd.notna(rec.get("upside"))) else None,
+        fmt_idr(effective_price, default="Not eligible" if is_dcf_ineligible else "Not available"),
+        delta=f"{rec['upside']:+.1%} vs market" if (rec["rating"] != "NOT ELIGIBLE" and rec.get("upside") is not None and pd.notna(rec.get("upside"))) else None,
         help="Weighted synthesis of Scenario-Weighted DCF and Relative Peer Valuation using effective approach weights.",
     )
     kpi_r1_2.metric(
         "Observed Reference Market Price",
-        f"Rp {price:,.0f}" if price else "Not available",
-        help=f"Reference market share price (IDR/share). Market Cap: Rp {mkt_cap:,.1f} bn." if mkt_cap else "Reference market price in IDR.",
+        fmt_idr(price, default="Not available"),
+        help=f"Reference market share price (IDR/share). Market Cap: {fmt_idr(mkt_cap, prefix='Rp ', default='—')} bn." if mkt_cap else "Reference market price in IDR.",
     )
     kpi_r1_3.metric(
         "Fair-Value Range (Bear–Bull / P25–P75)",
@@ -1630,15 +1689,15 @@ with overview:
         st.markdown('<div class="pillar-tag pillar-tag-market"><span>PILLAR 1 · OBSERVED MARKET</span><span>0% WEIGHT</span></div>', unsafe_allow_html=True)
         st.metric(
             "Reference price",
-            f"Rp {price:,.0f}" if price else "Not available",
+            fmt_idr(price, default="Not available"),
             help="Current reference market trading price on the Indonesia Stock Exchange (IDX).",
         )
         st.markdown(
             f"""<div class="pillar-metrics">
-                <div class="p-row"><span>Market Cap</span><b>Rp {mkt_cap:,.1f} bn</b></div>
+                <div class="p-row"><span>Market Cap</span><b>{fmt_idr(mkt_cap, prefix='Rp ', default='—')} bn</b></div>
                 <div class="p-row"><span>Trailing P/E</span><b>{pe_str}</b></div>
                 <div class="p-row"><span>EV / EBITDA</span><b>{evebitda_str}</b></div>
-                <div class="p-row"><span>Diluted Shares</span><b>{shares:,.2f} bn</b></div>
+                <div class="p-row"><span>Diluted Shares</span><b>{fmt_shares(shares)}</b></div>
             </div>""",
             unsafe_allow_html=True,
         )
@@ -1647,14 +1706,14 @@ with overview:
         st.markdown(f'<div class="pillar-tag pillar-tag-dcf"><span>PILLAR 2 · INTRINSIC DCF ANCHOR</span><span>{approach_eval["dcf_weight"]:.0%} WEIGHT</span></div>', unsafe_allow_html=True)
         st.metric(
             "DCF value / share",
-            f"Rp {dcf_p:,.0f}" if dcf_p and dcf_p > 0 else ("Not eligible" if is_dcf_ineligible else "Check assumptions"),
-            help=f"Probability-weighted expected DCF value across Bear ({norm_probs.get('Bear', 0.25):.0%}), Base ({norm_probs.get('Base', 0.50):.0%}), and Bull ({norm_probs.get('Bull', 0.25):.0%}) scenarios. Base case alone: Rp {base_dcf_price:,.0f}." if base_dcf_price else "Discounted Cash Flow intrinsic valuation.",
+            fmt_idr(dcf_p, default="Not eligible" if is_dcf_ineligible else "Check assumptions") if (dcf_p and dcf_p > 0) else ("Not eligible" if is_dcf_ineligible else "Check assumptions"),
+            help=f"Probability-weighted expected DCF value across Bear ({norm_probs.get('Bear', 0.25):.0%}), Base ({norm_probs.get('Base', 0.50):.0%}), and Bull ({norm_probs.get('Bull', 0.25):.0%}) scenarios. Base case alone: {fmt_idr(base_dcf_price)}." if base_dcf_price else "Discounted Cash Flow intrinsic valuation.",
         )
         st.markdown(
             f"""<div class="pillar-metrics">
-                <div class="p-row"><span>Base Case ({norm_probs.get('Base', 0.50):.0%})</span><b>Rp {base_dcf_price:,.0f}</b></div>
-                <div class="p-row"><span>Bear Case ({norm_probs.get('Bear', 0.25):.0%})</span><b>Rp {bear_price:,.0f}</b></div>
-                <div class="p-row"><span>Bull Case ({norm_probs.get('Bull', 0.25):.0%})</span><b>Rp {bull_price:,.0f}</b></div>
+                <div class="p-row"><span>Base Case ({norm_probs.get('Base', 0.50):.0%})</span><b>{fmt_idr(base_dcf_price)}</b></div>
+                <div class="p-row"><span>Bear Case ({norm_probs.get('Bear', 0.25):.0%})</span><b>{fmt_idr(bear_price)}</b></div>
+                <div class="p-row"><span>Bull Case ({norm_probs.get('Bull', 0.25):.0%})</span><b>{fmt_idr(bull_price)}</b></div>
                 <div class="p-row"><span>WACC · Terminal g</span><b>{a.wacc*100:.2f}% · {a.terminal_growth*100:.2f}%</b></div>
             </div>""",
             unsafe_allow_html=True,
@@ -1662,6 +1721,11 @@ with overview:
 
     with p_col3:
         st.markdown(f'<div class="pillar-tag pillar-tag-rel"><span>PILLAR 3 · RELATIVE PEER CROSS-CHECK</span><span>{approach_eval["rel_weight"]:.0%} WEIGHT</span></div>', unsafe_allow_html=True)
+        st.metric(
+            "Relative value / share",
+            fmt_idr(rel_price, default="Needs >= 2 peers") if (pd.notna(rel_price) and rel_price > 0) else "Needs >= 2 peers",
+            help="Harmonic or median peer multiple cross-check across eligible IDX-IC sub-industry peer companies.",
+        )
         st.metric(
             "Relative value / share",
             f"Rp {rel_price:,.0f}" if pd.notna(rel_price) and rel_price > 0 else "Needs >= 2 peers",
@@ -1769,7 +1833,10 @@ with overview:
             f"{x['Scenario']} ({_fmt_prob(norm_probs.get(x['Scenario'], x.get('Probability', 0.0)))})"
             for x in scenario_rows
         ]
-        scen_vals = [price if price else 0.0] + [x["Value / share"] for x in scenario_rows]
+        scen_vals = [price if (price and pd.notna(price)) else 0.0] + [
+            (x["Value / share"] if (x.get("Value / share") is not None and pd.notna(x.get("Value / share"))) else 0.0)
+            for x in scenario_rows
+        ]
         scen_colors = ["#6E6E73", "#D97706", "#087F69", "#173E37"]
         max_sc_val = max(scen_vals) if scen_vals else 3000
         fig_sc_ov = go.Figure(go.Bar(
@@ -1998,13 +2065,13 @@ with peers_tab:
 
             excl_reasons = exclusion_info.get(m_name, []) if 'exclusion_info' in locals() else []
             if is_elig and pd.notna(price_val):
-                p_display = f"Rp {price_val:,.0f}"
-                sub_display = f"{mult_val:.2f}x ({rel_agg_choice})"
+                p_display = fmt_idr(price_val)
+                sub_display = f"{mult_val:.2f}x ({rel_agg_choice})" if (mult_val is not None and pd.notna(mult_val)) else f"— ({rel_agg_choice})"
                 status_html = f"<span style='color: #087F69; font-weight: 700; font-size: 11px;'>ELIGIBLE ({peers_used} peers)</span>"
                 note_html = ""
             else:
                 p_display = "—"
-                sub_display = f"{mult_val:.2f}x" if pd.notna(mult_val) else "No peers"
+                sub_display = f"{mult_val:.2f}x" if (mult_val is not None and pd.notna(mult_val)) else "No peers"
                 status_html = f"<span style='color: #B25000; font-weight: 700; font-size: 11px;'>INELIGIBLE ({peers_used}/2 peers)</span>"
                 note_html = f"<div style='font-size: 10px; color: #8a5314; margin-top: 4px; line-height: 1.25;'>Excluded {', '.join(excl_reasons)} to prevent negative multiple distortion.</div>" if excl_reasons else ""
 
@@ -2248,7 +2315,7 @@ with peers_tab:
             x=bar_labels,
             y=chart_bars,
             marker_color=bar_colors,
-            text=[f"Rp {v:,.0f}" for v in chart_bars],
+            text=[fmt_idr(v) for v in chart_bars],
             textposition="auto"
         ))
         chart(fig_rv, "IDR / share")
@@ -2507,34 +2574,39 @@ with scenario_tab:
     if result:
         # ── SCENARIO KPI CARDS ──
         sc_k1, sc_k2, sc_k3, sc_k4, sc_k5 = st.columns(5)
-        sc_k1.metric("Observed Market Price", f"Rp {price:,.0f}", "Reference Quote")
+        sc_k1.metric("Observed Market Price", fmt_idr(price, default="N/A"), "Reference Quote")
         sc_k2.metric(
             "Bear Case Target",
-            f"Rp {bear_p:,.0f}" if bear_p else "N/A",
-            f"{((bear_p / price - 1.0) if (bear_p and price > 0) else 0.0):+.1%} vs. Market ({norm_probs.get('Bear', 0.25):.0%} prob)",
+            fmt_idr(bear_p, default="N/A"),
+            f"{((bear_p / price - 1.0) if (bear_p and price and price > 0) else 0.0):+.1%} vs. Market ({norm_probs.get('Bear', 0.25):.0%} prob)",
         )
         sc_k3.metric(
             "Base Case Target",
-            f"Rp {base_dcf_price:,.0f}" if base_dcf_price else "N/A",
-            f"{((base_dcf_price / price - 1.0) if (base_dcf_price and price > 0) else 0.0):+.1%} vs. Market ({norm_probs.get('Base', 0.50):.0%} prob)",
+            fmt_idr(base_dcf_price, default="N/A"),
+            f"{((base_dcf_price / price - 1.0) if (base_dcf_price and price and price > 0) else 0.0):+.1%} vs. Market ({norm_probs.get('Base', 0.50):.0%} prob)",
         )
         sc_k4.metric(
             "Bull Case Target",
-            f"Rp {bull_p:,.0f}" if bull_p else "N/A",
-            f"{((bull_p / price - 1.0) if (bull_p and price > 0) else 0.0):+.1%} vs. Market ({norm_probs.get('Bull', 0.25):.0%} prob)",
+            fmt_idr(bull_p, default="N/A"),
+            f"{((bull_p / price - 1.0) if (bull_p and price and price > 0) else 0.0):+.1%} vs. Market ({norm_probs.get('Bull', 0.25):.0%} prob)",
         )
         sc_k5.metric(
             "Expected (Weighted) DCF",
-            f"Rp {expected_dcf_price:,.0f}" if expected_dcf_price else "N/A",
-            f"{((expected_dcf_price / price - 1.0) if (expected_dcf_price and price > 0) else 0.0):+.1%} vs. Market",
+            fmt_idr(expected_dcf_price, default="N/A"),
+            f"{((expected_dcf_price / price - 1.0) if (expected_dcf_price and price and price > 0) else 0.0):+.1%} vs. Market",
         )
 
         sc_col_left, sc_col_right = st.columns([1.05, 1], gap="medium")
         with sc_col_left:
             st.markdown("#### Observed Market Price vs. Scenario Target Prices")
-            sc_labels_tab = ["Observed Market Price"]
-            sc_vals_tab = [float(price)]
-            sc_colors_tab = ["#6E6E73"]
+            sc_labels_tab = []
+            sc_vals_tab = []
+            sc_colors_tab = []
+            if price and pd.notna(price):
+                sc_labels_tab.append("Observed Market Price")
+                sc_vals_tab.append(float(price))
+                sc_colors_tab.append("#6E6E73")
+
             def _fmt_prob(p):
                 pct = p * 100.0
                 return f"{pct:.1f}%" if pct % 1 != 0 else f"{pct:.0f}%"
@@ -2560,11 +2632,12 @@ with scenario_tab:
                 x=sc_labels_tab,
                 y=sc_vals_tab,
                 marker_color=sc_colors_tab,
-                text=[f"Rp {v:,.0f}" for v in sc_vals_tab],
+                text=[fmt_idr(v) for v in sc_vals_tab],
                 textposition="outside",
                 cliponaxis=False,
             ))
-            fig_scen_tab.add_hline(y=float(price), line_dash="dash", line_color="#1D1D1F", line_width=1.5)
+            if price and pd.notna(price):
+                fig_scen_tab.add_hline(y=float(price), line_dash="dash", line_color="#1D1D1F", line_width=1.5)
             chart(fig_scen_tab, "IDR / share")
 
         with sc_col_right:
@@ -2680,7 +2753,7 @@ with final_interp_tab:
                 </div>
                 <div>
                     <div style="font-size:0.74rem; color:#6E6E73; font-weight:600; text-transform:uppercase;">Observed Market Price</div>
-                    <div style="font-size:1.65rem; font-weight:800; color:#1D1D1F; font-variant-numeric:tabular-nums;">Rp {price:,.0f}</div>
+                    <div style="font-size:1.65rem; font-weight:800; color:#1D1D1F; font-variant-numeric:tabular-nums;">{fmt_idr(price, default='N/A')}</div>
                     <div style="font-size:0.78rem; color:#6E6E73;">Implied Upside / Downside: <b>{fi_up_str}</b></div>
                 </div>
                 <div>
@@ -2763,8 +2836,8 @@ with report_tab:
             <div style="font-size:0.92rem; color:#1D1D1F; line-height:1.65;">
                 <b>{clean_name} ({c['symbol']})</b> is classified under IDX-IC <b>{c.get('sector', 'IDX Sector')} — {c.get('industry', 'General')}</b>
                 with latest audited base fiscal period <b>{period}</b>. Based on a 5-year explicit Free Cash Flow to Firm (FCFF) DCF model
-                and comparable IDX peer multiples, we estimate a <b>Blended Fair Value of {f'Rp {blended_price:,.0f}' if blended_price else 'N/A'} per share</b>
-                ({eff_w_dcf:.0%} DCF / {eff_w_rel:.0%} Relative) compared against the observed reference market price of <b>Rp {price:,.0f} per share</b>,
+                and comparable IDX peer multiples, we estimate a <b>Blended Fair Value of {fmt_idr(blended_price, default='N/A')} per share</b>
+                ({eff_w_dcf:.0%} DCF / {eff_w_rel:.0%} Relative) compared against the observed reference market price of <b>{fmt_idr(price, default='N/A')} per share</b>,
                 implying <b>{f'{upside_pct:+.1%}' if upside_pct is not None else 'N/A'}</b> upside/downside and supporting a <b>{rec_rating}</b> recommendation
                 within an estimated fair-value range of <b>{f'Rp {fv_low:,.0f} – Rp {fv_high:,.0f}' if (fv_low and fv_high) else 'N/A'}</b>.
             </div>
@@ -2778,36 +2851,36 @@ with report_tab:
     val_summary_rows = [
         {
             "Valuation Pillar": "Observed Market Price (Reference)",
-            "Implied Value / Share": f"Rp {price:,.0f}",
+            "Implied Value / Share": fmt_idr(price, default="N/A"),
             "Vs. Market Price": "0.0% (Benchmark)",
             "Effective Weight": "—",
-            "Methodology & Basis": f"Latest market reference quote · {shares:,.3f} bn diluted shares",
+            "Methodology & Basis": f"Latest market reference quote · {fmt_shares(shares)} diluted shares",
         },
         {
             "Valuation Pillar": "Intrinsic DCF (Base Case)",
-            "Implied Value / Share": f"Rp {base_dcf_price:,.0f}" if base_dcf_price else "N/A",
-            "Vs. Market Price": f"{((base_dcf_price / price - 1.0) if (base_dcf_price and price > 0) else 0.0):+.1%}",
+            "Implied Value / Share": fmt_idr(base_dcf_price, default="N/A"),
+            "Vs. Market Price": f"{((base_dcf_price / price - 1.0) if (base_dcf_price and price and price > 0) else 0.0):+.1%}",
             "Effective Weight": "—",
             "Methodology & Basis": f"5-year explicit FCFF + Year-6 perpetuity (WACC {a.wacc:.2%}, g {a.terminal_growth:.2%}, ROIC {a.terminal_roic:.2%})",
         },
         {
             "Valuation Pillar": "Intrinsic DCF (Probability-Weighted Expected)",
-            "Implied Value / Share": f"Rp {dcf_p:,.0f}" if dcf_p else "N/A",
-            "Vs. Market Price": f"{((dcf_p / price - 1.0) if (dcf_p and price > 0) else 0.0):+.1%}",
+            "Implied Value / Share": fmt_idr(dcf_p, default="N/A"),
+            "Vs. Market Price": f"{((dcf_p / price - 1.0) if (dcf_p and price and price > 0) else 0.0):+.1%}",
             "Effective Weight": f"{eff_w_dcf:.1%}",
             "Methodology & Basis": f"Bear ({norm_probs.get('Bear', 0.25):.0%}) / Base ({norm_probs.get('Base', 0.50):.0%}) / Bull ({norm_probs.get('Bull', 0.25):.0%}) weighted intrinsic value",
         },
         {
             "Valuation Pillar": f"Relative Valuation ({rel_agg_choice})",
-            "Implied Value / Share": f"Rp {rel_price:,.0f}" if pd.notna(rel_price) else "N/A (< 2 peers)",
-            "Vs. Market Price": f"{((rel_price / price - 1.0) if (pd.notna(rel_price) and price > 0) else 0.0):+.1%}" if pd.notna(rel_price) else "—",
+            "Implied Value / Share": fmt_idr(rel_price, default="N/A (< 2 peers)") if pd.notna(rel_price) else "N/A (< 2 peers)",
+            "Vs. Market Price": f"{((rel_price / price - 1.0) if (pd.notna(rel_price) and price and price > 0) else 0.0):+.1%}" if pd.notna(rel_price) else "—",
             "Effective Weight": f"{eff_w_rel:.1%}",
             "Methodology & Basis": f"Weighted across eligible EV/EBITDA, EV/EBIT, P/E, P/BV multiples ({len(peer_rows)} active peers)",
         },
         {
             "Valuation Pillar": "Blended Fair Value Target",
-            "Implied Value / Share": f"Rp {blended_price:,.0f}" if blended_price else "N/A",
-            "Vs. Market Price": f"{upside_pct:+.1%}" if upside_pct is not None else "—",
+            "Implied Value / Share": fmt_idr(blended_price, default="N/A"),
+            "Vs. Market Price": fmt_pct(upside_pct, signed=True, default="—"),
             "Effective Weight": "100.0%",
             "Methodology & Basis": f"Recommendation: {rec_rating} (BUY > +15%, HOLD ±15%, SELL < −15%)",
         },
