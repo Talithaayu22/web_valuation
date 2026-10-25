@@ -5,6 +5,7 @@ import json
 import math
 import re
 import sys
+from typing import Any, Tuple
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -19,7 +20,7 @@ for _mod_name in ("valuation.model", "valuation.data", "valuation.report_pdf", "
             pass
 
 try:
-    from valuation.data import clean_company_name
+    from valuation.data import clean_company_name, format_wib_retrieval
 except ImportError:
     def clean_company_name(name: str) -> str:
         if not name:
@@ -28,6 +29,9 @@ except ImportError:
         cleaned = re.sub(r"\bperusahaan\s+perseroan\b", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\(persero\)", "", cleaned, flags=re.IGNORECASE)
         return re.sub(r"\s+", " ", cleaned).strip()
+
+    def format_wib_retrieval(ts: Any) -> Tuple[str, str]:
+        return "Offline Benchmark", "Offline Benchmark"
 
 try:
     from valuation.data import (
@@ -400,6 +404,54 @@ div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] button[data-ba
 
 .eyebrow { color: #087F69; font-size: 11.5px; font-weight: 700; letter-spacing: 1.5px; margin-bottom: 4px; text-transform: uppercase; }
 .badge { display: inline-block; background: #E6F4F1; color: #087F69; padding: 4px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 600; border: 1px solid #B7E1D7; }
+
+/* Top-Right Data Retrieval Status Badge */
+.retrieval-badge-container {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    width: 100%;
+}
+.retrieval-badge {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+    background: #E6F4F1;
+    color: #087F69;
+    border: 1px solid #B7E1D7;
+    border-radius: 14px;
+    padding: 5px 12px;
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.35;
+    white-space: nowrap;
+    width: fit-content;
+    box-sizing: border-box;
+    box-shadow: 0 1px 2px rgba(8, 127, 105, 0.05);
+}
+.retrieval-badge .badge-source {
+    font-size: 11px;
+    color: #066352;
+    font-weight: 600;
+    opacity: 0.95;
+}
+@media (max-width: 768px) {
+    .retrieval-badge {
+        font-size: 10.5px;
+        padding: 4px 10px;
+        border-radius: 12px;
+    }
+    .retrieval-badge .badge-source {
+        font-size: 10px;
+    }
+    .retrieval-badge .date-full { display: none; }
+    .retrieval-badge .date-short { display: inline; }
+}
+@media (min-width: 769px) {
+    .retrieval-badge .date-full { display: inline; }
+    .retrieval-badge .date-short { display: none; }
+}
 .hero { padding: 18px 22px; background: #FFFFFF; color: #1D1D1F; border: 1px solid #E5E5EA; border-radius: 14px; margin: 8px 0 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.03); }
 .hero h2 { color: #1D1D1F !important; margin: 0 0 4px; font-size: 1.5rem; }
 .hero p { color: #6E6E73; margin: 0; font-size: 0.92rem; }
@@ -863,9 +915,7 @@ key = lambda name: f"{rev}_{name}"
 
 clean_name = clean_company_name(c.get("name", ""))
 latest_period_preview = str(c["historical"].columns[-1]) if (c.get("historical") is not None and not c["historical"].empty) else "N/A"
-prov_badge_text = "DEMO · FICTIONAL DATA" if c["demo"] else f"{escape(c['symbol'])} · REPORTED YAHOO & IDX REGISTRY"
-
-hdr_left, hdr_right = st.columns([3.5, 1.5], vertical_alignment="center")
+hdr_left, hdr_right = st.columns([3.2, 1.8], vertical_alignment="center")
 with hdr_left:
     st.markdown('<div class="eyebrow">NUSA · INDONESIA EQUITY RESEARCH & VALUATION LAB</div>', unsafe_allow_html=True)
     st.markdown(
@@ -878,12 +928,20 @@ with hdr_left:
         unsafe_allow_html=True,
     )
 with hdr_right:
-    obs_text = "Illustrative offline benchmark" if c["demo"] else f"Retrieved {c.get('fetched_at', '—')} · FY-end basis"
+    if c["demo"]:
+        retrieval_line1_full = retrieval_line1_short = "Offline Benchmark"
+        retrieval_line2 = "From : Fictional Dataset"
+    else:
+        retrieval_line1_full, retrieval_line1_short = format_wib_retrieval(c.get("fetched_at"))
+        retrieval_line2 = "From : Yahoo Finance"
+
     st.markdown(
-        f"<div style='text-align:right;'>"
-        f"<span class='badge'>{prov_badge_text}</span>"
-        f"<div style='font-size:11.5px; color:#6E6E73; margin-top:4px;'>{escape(obs_text)}</div>"
-        f"</div>",
+        f'<div class="retrieval-badge-container">'
+        f'<div class="retrieval-badge">'
+        f'<div>Retrieved Data: <span class="date-full">{escape(retrieval_line1_full)}</span><span class="date-short">{escape(retrieval_line1_short)}</span></div>'
+        f'<div class="badge-source">{escape(retrieval_line2)}</div>'
+        f'</div>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 

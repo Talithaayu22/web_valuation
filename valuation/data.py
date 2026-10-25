@@ -1,7 +1,7 @@
 """Yahoo adapter and financial dataset normalizer for IDX issuers.
 Aligned with Aswath Damodaran's DCF and Relative Valuation data standards.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import functools
 import math
@@ -406,6 +406,28 @@ def fetch_company(symbol):
         raw={"Income statement": income, "Balance sheet": balance, "Cash flow": cashflow},
         demo=False,
     )
+
+
+def format_wib_retrieval(ts) -> tuple[str, str]:
+    """Format UTC/ISO retrieval timestamp into WIB Western Indonesia Time (UTC+7).
+    Returns (full_wib, compact_wib).
+    """
+    if not ts or str(ts).startswith("Illustrative"):
+        return "Offline Benchmark", "Offline Benchmark"
+    try:
+        if isinstance(ts, datetime):
+            dt = ts
+        else:
+            dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        wib_dt = dt.astimezone(timezone(timedelta(hours=7)))
+        full_str = wib_dt.strftime("%d %b %Y, %H:%M WIB")
+        short_str = wib_dt.strftime("%d %b '%y, %H:%M WIB")
+        return full_str, short_str
+    except Exception:
+        clean = str(ts)[:16].replace("T", " ")
+        return clean, clean
 
 
 def demo_company():

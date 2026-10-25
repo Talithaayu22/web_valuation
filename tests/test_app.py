@@ -58,3 +58,28 @@ def test_app_resilience_with_missing_market_quotes():
     assert not app.exception
     obs_metric = next(m.value for m in app.metric if m.label == "Observed Reference Market Price")
     assert obs_metric == "Not available"
+
+
+def test_format_wib_retrieval_and_badge_rendering():
+    from valuation.data import format_wib_retrieval
+    # 1. ISO UTC timestamp -> WIB (UTC+7)
+    full, short = format_wib_retrieval("2026-10-25T10:52:00+00:00")
+    assert full == "25 Oct 2026, 17:52 WIB"
+    assert short == "25 Oct '26, 17:52 WIB"
+
+    # 2. Demo or illustrative string
+    full_demo, short_demo = format_wib_retrieval("Illustrative data, not market data")
+    assert full_demo == "Offline Benchmark"
+    assert short_demo == "Offline Benchmark"
+
+    # 3. None / empty
+    full_none, short_none = format_wib_retrieval(None)
+    assert full_none == "Offline Benchmark"
+
+    # 4. AppTest verifies the badge renders inside the app
+    app = AppTest.from_file(Path(__file__).resolve().parents[1]/"app.py", default_timeout=30).run()
+    assert not app.exception
+    rendered_markdown = " ".join(x.value for x in app.markdown)
+    assert "retrieval-badge" in rendered_markdown
+    assert "Retrieved Data:" in rendered_markdown
+    assert "From :" in rendered_markdown
