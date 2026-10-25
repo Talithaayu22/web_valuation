@@ -10,8 +10,8 @@ A local Python/Streamlit equity research and 3-statement valuation workspace for
 ├── app.py                  # Main Streamlit web application & UI tabs
 ├── valuation/
 │   ├── data.py             # Financial statement ingestion & normalization
-│   ├── model.py            # 10-year 3-statement forecast, DCF, sensitivity & peer multiples
-│   ├── export.py           # 10-sheet formatted Excel (.xlsx) snapshot generator
+│   ├── model.py            # 5-year explicit pro-forma forecast, DCF, sensitivity & peer multiples
+│   ├── export.py           # Populated Excel (.xlsx) valuation model with dynamic formulas & dashboard
 │   └── storage.py          # Local SQLite persistence for saved analyses
 ├── tests/
 │   ├── test_app.py         # End-to-end Streamlit UI & persistence tests
@@ -42,10 +42,10 @@ Open http://localhost:8501. You can also double-click `start.cmd`, or run `./sta
 
 1. Explore the explicitly fictional demo or enter a four-character IDX ticker.
 2. In **Data review**, check historical figures, currency, missing values, shares, and price. Correct opening inputs as needed. Expenses are positive. Monetary inputs use IDR billion; shares use billion units.
-3. Adjust assumptions in the sidebar and click **Apply assumptions**. Edit individual years under **10-year model**; **Reset annual overrides** restores the sidebar-driven trajectory.
+3. Adjust assumptions in the sidebar and click **Apply assumptions**. Edit individual years under **5-year model**; **Reset annual overrides** restores the sidebar-driven trajectory.
 4. Inspect linked statements, funding requirements, DCF, scenarios, and sensitivity.
 5. Under **Relative valuation**, fetch up to eight IDX peers. Select peers, enter foreign-currency conversions and enterprise-value adjustments where needed. Comparisons require the exact same annual fiscal period; incompatible periods are excluded.
-6. Save locally or export an Excel values snapshot. Saved analyses include the source snapshot, opening corrections, drivers, assumptions, price/shares, and peer snapshot. Excel exports contain values, not a formula-driven workbook.
+6. Save locally or export an Excel values snapshot. Saved analyses include the source snapshot, opening corrections, drivers, assumptions, price/shares, and peer snapshot. Excel exports feature an executive Dashboard, fully populated actual financial figures, and live dynamic audit-trail formulas.
 
 ## Model conventions
 
@@ -54,7 +54,7 @@ Open http://localhost:8501. You can also double-click `start.cmd`, or run `./sta
 - D&A is a percentage of opening PPE, capped at available PPE. Interest uses opening debt. Capex is a revenue percentage. Other non-current assets/liabilities are fixed.
 - Explicit revolver draws fund cash shortfalls. Repayments retire short-term debt first. Excess cash remains on balance sheet. This is a simplified financing policy, not a credit-capacity assessment.
 - FCFF = EBIT × (1 − tax rate) + D&A − capex − change in operating working capital.
-- Terminal FCFF = year-11 NOPAT × (1 − terminal growth / terminal ROIC). WACC must exceed growth; terminal ROIC must exceed growth.
+- Terminal FCFF = Year 5 NOPAT × (1 + g) × (1 − g / terminal ROIC). Explicit discounting covers Years 1 through 5; Terminal Value is discounted to present value using Year 5 WACC discounting ((1 + WACC)^5). WACC must exceed growth; terminal ROIC must exceed growth.
 - Enterprise-to-equity bridge uses opening cash, debt, additional non-operating assets, and other claims. Opening equity includes minorities where supplied; enter the minority claim separately in valuation. Current or user-supplied diluted shares stay fixed.
 - Annual year-end discounting starts at the last reported fiscal year. No current-date stub-period adjustment. This makes the quoted-price comparison approximate when reports are old.
 - P/E uses reported net income. Review non-controlling and preferred claims for affected companies. Peer EV uses debt including leases where supplied, cash, and a user-entered net adjustment. Comparability must be reviewed by the analyst.
