@@ -491,9 +491,18 @@ def sensitivity(f, b, a, shares):
     return pd.DataFrame(grid, index=[f"{w:.2%}" for w in ws], columns=[f"{g:.2%}" for g in gs])
 
 
+MULTIPLE_SANITY_BOUNDS = {
+    "EV / EBITDA": {"min_mult": 0.1, "max_mult": 100.0, "desc": "EBITDA"},
+    "EV / EBIT": {"min_mult": 0.1, "max_mult": 120.0, "desc": "operating income (EBIT)"},
+    "P / E": {"min_mult": 0.5, "max_mult": 150.0, "desc": "net income"},
+    "P / BV": {"min_mult": 0.05, "max_mult": 30.0, "desc": "book equity"},
+}
+
+
 def relative_values(peers, target, cash, debt, shares, other_claims=0, nonoperating_assets=0):
     """Peer rows and target denominators must use the same annual period basis.
-    Enterprise multiples exclude negative EV and non-positive denominators.
+    Enterprise multiples exclude negative EV, non-positive denominators, and
+    extreme distorted statistical outliers (per Damodaran multiple boundaries).
     Aligned with Damodaran Week 4 Slide 7 & 25 (EV/Rev, EV/EBITDA, EV/EBIT, P/E, P/BV).
     """
     if shares <= 0:
@@ -511,13 +520,19 @@ def relative_values(peers, target, cash, debt, shares, other_claims=0, nonoperat
     for label, metric, numerator in multiples_spec:
         multiples = []
         valid_peer_tickers = []
+        bounds = MULTIPLE_SANITY_BOUNDS.get(label, {})
+        max_mult = bounds.get("max_mult", 200.0)
+        min_mult = bounds.get("min_mult", 0.01)
+
         for p in peers:
             den, num = p.get(metric), p.get(numerator)
             if den is not None and num is not None and math.isfinite(den) and math.isfinite(num) and den > 0 and num > 0:
-                multiples.append(num / den)
-                t = p.get("ticker") or p.get("symbol") or ""
-                t_clean = t.replace(".JK", "") if t else "Peer"
-                valid_peer_tickers.append(t_clean)
+                mult = num / den
+                if min_mult <= mult <= max_mult:
+                    multiples.append(mult)
+                    t = p.get("ticker") or p.get("symbol") or ""
+                    t_clean = t.replace(".JK", "") if t else "Peer"
+                    valid_peer_tickers.append(t_clean)
         cases = [
             ("Lower quartile", float(np.percentile(multiples, 25)) if multiples else float("nan")),
             ("Median", float(np.percentile(multiples, 50)) if multiples else float("nan")),
@@ -654,6 +669,15 @@ def get_multiple_exclusion_details(peers):
                     excluded_peers.append(f"{sym} (missing {desc})")
             elif num is None or not math.isfinite(num) or num <= 0:
                 excluded_peers.append(f"{sym} (non-positive enterprise/market value)")
+            else:
+                mult = num / den
+                bounds = MULTIPLE_SANITY_BOUNDS.get(m_name, {})
+                max_mult = bounds.get("max_mult", 200.0)
+                min_mult = bounds.get("min_mult", 0.01)
+                if mult > max_mult:
+                    excluded_peers.append(f"{sym} (extreme multiple outlier: {mult:,.1f}x exceeds {max_mult:.0f}x cap)")
+                elif mult < min_mult:
+                    excluded_peers.append(f"{sym} (extreme multiple outlier: {mult:,.2f}x below {min_mult:.2f}x floor)")
 
         details[m_name] = excluded_peers
     return details

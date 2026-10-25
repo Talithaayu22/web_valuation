@@ -741,9 +741,10 @@ with hdr_left:
     st.markdown(
         f"<h2 style='margin:0 0 2px 0; font-size:1.65rem;'>{escape(clean_name)} "
         f"<span style='color:#6E6E73; font-weight:500; font-size:1.15rem;'>({escape(c.get('symbol', ''))})</span></h2>"
-        f"<div style='font-size:0.88rem; color:#6E6E73;'>Sector: <b>{escape(c.get('sector', '—'))}</b> &nbsp;·&nbsp; "
-        f"Sub-Industry: <b>{escape(c.get('industry', '—'))}</b> &nbsp;·&nbsp; "
-        f"Fiscal Period: <b>{escape(latest_period_preview)}</b></div>",
+        f"<div style='font-size:0.88rem; color:#6E6E73; line-height:1.45; margin-top:3px;'>"
+        f"<div>Sector: <b>{escape(c.get('sector', '—'))}</b> &nbsp;·&nbsp; Sub-Industry: <b>{escape(c.get('industry', '—'))}</b></div>"
+        f"<div style='margin-top:2px;'>Fiscal Period: <b>{escape(latest_period_preview)}</b></div>"
+        f"</div>",
         unsafe_allow_html=True,
     )
 with hdr_right:
@@ -1748,11 +1749,6 @@ with overview:
         st.metric(
             "Relative value / share",
             fmt_idr(rel_price, default="Needs >= 2 peers") if (pd.notna(rel_price) and rel_price > 0) else "Needs >= 2 peers",
-            help="Harmonic or median peer multiple cross-check across eligible IDX-IC sub-industry peer companies.",
-        )
-        st.metric(
-            "Relative value / share",
-            f"Rp {rel_price:,.0f}" if pd.notna(rel_price) and rel_price > 0 else "Needs >= 2 peers",
             help="Harmonic or median peer multiple cross-check across eligible IDX-IC sub-industry peer companies.",
         )
         st.markdown(

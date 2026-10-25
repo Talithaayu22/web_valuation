@@ -1091,3 +1091,64 @@ def test_statement_shares_fallback_when_info_empty(monkeypatch):
     assert res["shares"] is not None
     assert res["shares"] > 90e9
     assert res["price"] == 2240.0
+
+
+def test_damodaran_plantations_and_crops_cyclical_detection():
+    # Cyclical Plantation company with trough revenue (CAGR ~ 0.17%)
+    h = pd.DataFrame({
+        "2022-12-31": {"revenue": 10000.0, "capex": 500.0, "cogs": 7000.0, "opex": 500.0, "da": 300.0},
+        "2023-12-31": {"revenue": 9500.0, "capex": 500.0, "cogs": 6800.0, "opex": 500.0, "da": 300.0},
+        "2024-12-31": {"revenue": 9800.0, "capex": 500.0, "cogs": 6900.0, "opex": 500.0, "da": 300.0},
+        "2025-12-31": {"revenue": 10050.0, "capex": 500.0, "cogs": 7000.0, "opex": 500.0, "da": 300.0},
+    })
+    b = {"revenue": 10050.0, "cogs": 7000.0, "opex": 500.0, "da": 300.0, "ppe": 5000.0}
+
+    # 1. Plantation issuer under Consumer Non-Cyclicals -> detected as cyclical and normalized to 3.5%
+    plantation_co = {"symbol": "TAPG.JK", "sector": "Consumer Non-Cyclicals", "industry": "Plantations & Crops"}
+    a_plantation = infer_assumptions(h, b, plantation_co)
+    assert a_plantation.growth == pytest.approx(0.035)
+
+    # 2. Processed Foods under Consumer Non-Cyclicals -> NOT detected as cyclical, exact historical CAGR preserved
+    food_co = {"symbol": "ICBP.JK", "sector": "Consumer Non-Cyclicals", "industry": "Processed Foods"}
+    a_food = infer_assumptions(h, b, food_co)
+    cagr = (10050.0 / 10000.0)**(1/3) - 1.0
+    assert a_food.growth == pytest.approx(cagr)
+    assert a_food.growth < 0.01
+
+
+
+def test_multiple_outlier_clamping_and_exclusion_reasons():
+    from valuation.model import relative_values, composite_relative_value, get_multiple_exclusion_details
+
+    # Normal peers + 1 distorted micro-denominator peer (e.g. PACK with EV/EBITDA of 9,101x)
+    peers = [
+        {"ticker": "BRMS.JK", "market_cap": 11000.0, "ev": 10000.0, "ebitda": 1367.0, "ebit": 1350.0, "net_income": 800.0, "book_equity": 20000.0},
+        {"ticker": "DKFT.JK", "market_cap": 3500.0, "ev": 3300.0, "ebitda": 657.0, "ebit": 550.0, "net_income": 570.0, "book_equity": 1200.0},
+        {"ticker": "HRUM.JK", "market_cap": 9500.0, "ev": 31000.0, "ebitda": 1320.0, "ebit": 1320.0, "net_income": 600.0, "book_equity": 14000.0},
+        {"ticker": "PACK.JK", "market_cap": 13785.0, "ev": 13721.0, "ebitda": 1.5, "ebit": 1.4, "net_income": 28.0, "book_equity": 105.0},
+    ]
+    target = {
+        "revenue": 84642.0, "ebit": 6975.0, "ebitda": 7143.0, "net_income": 7208.0, "book_equity": 36500.0,
+    }
+    shares = 24.031
+    cash = 9000.0
+    debt = 3400.0
+
+    # Test relative_values: PACK must be filtered out from EV/EBITDA, EV/EBIT, P/E, P/BV
+    rv = relative_values(peers, target, cash, debt, shares)
+    for _, row in rv[rv["Case"] == "Median"].iterrows():
+        # Peers used must be 3 (excluding PACK which has EV/EBITDA ~9147 > 100)
+        assert row["Peers used"] == 3
+        assert "PACK" not in row["Eligible peers"]
+        # Implied price must remain realistic (between Rp 500 and Rp 6,000)
+        assert 500 <= row["Implied price (IDR)"] <= 6000
+
+    comp_price = composite_relative_value(rv)
+    assert 2000 <= comp_price <= 4000
+
+    # Test get_multiple_exclusion_details: PACK must be listed with the extreme multiple outlier reason
+    excl = get_multiple_exclusion_details(peers)
+    assert any("PACK (extreme multiple outlier" in reason for reason in excl["EV / EBITDA"])
+    assert any("PACK (extreme multiple outlier" in reason for reason in excl["EV / EBIT"])
+    assert any("PACK (extreme multiple outlier" in reason for reason in excl["P / E"])
+    assert any("PACK (extreme multiple outlier" in reason for reason in excl["P / BV"])
