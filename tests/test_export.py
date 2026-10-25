@@ -71,12 +71,10 @@ def test_populated_valuation_results_excel_export():
     
     # 4. Verify Pro-Forma Forecast populated numbers for all 5 projection years
     ws_pf = wb["Pro-Forma Forecast"]
-    # Check Revenue row (row 6) has numbers in base and all 5 years (cols 3..8)
     for c_i in range(3, 9):
         val = ws_pf.cell(row=6, column=c_i).value
         assert isinstance(val, (int, float)) and val > 0, f"Expected numeric Revenue in Pro-Forma col {c_i}, got: {val}"
         
-    # Check FCFF row (row 17) has numbers for all 5 forecast years (cols 4..8)
     for c_i in range(4, 9):
         fcff_val = ws_pf.cell(row=17, column=c_i).value
         assert isinstance(fcff_val, (int, float)), f"Expected numeric FCFF in Pro-Forma col {c_i}, got: {fcff_val}"
@@ -97,13 +95,111 @@ def test_populated_valuation_results_excel_export():
     
     # 6. Verify Relative Valuation populated medians and composite price
     ws_rel = wb["Relative Valuation"]
-    # Check composite relative value row
     r_comp = ws_rel.max_row
-    comp_val = ws_rel.cell(row=r_comp, column=7).value
-    assert isinstance(comp_val, (int, float)) and comp_val > 0, f"Expected numeric composite relative value, got: {comp_val}"
+    comp_val = ws_rel.cell(row=r_comp, column=8).value
+    assert isinstance(comp_val, (int, float)) and comp_val > 0, f"Expected numeric composite relative value in col 8, got: {comp_val}"
     
     # 7. Verify Historical & Inputs opening balance sheet check
     ws_hist = wb["Historical & Inputs"]
     plug = ws_hist["C17"].value
     assert isinstance(plug, (int, float)) and abs(plug) <= 0.01, f"Expected 0.00 plug in Historical check, got: {plug}"
     assert "BALANCED" in str(ws_hist["C18"].value)
+
+
+def test_synchronized_website_and_excel_export():
+    """Verifies that passing active website variables (scenarios, multi-metric weights)
+    produces 100% synchronized valuation results and recommendation in the Excel deliverable.
+    """
+    c = demo_company()
+    c["price"] = 2240.0
+    historical = c["historical"]
+    period = str(historical.columns[-1])
+    first_year = pd.Timestamp(period).year + 1
+    
+    b = {k: float(historical.loc[k, period]) if k in historical.index and pd.notna(historical.loc[k, period]) else 0.0 for k in BASE_FIELDS}
+    a = infer_assumptions(historical, b, c)
+    drivers = default_drivers(a, first_year)
+    f = forecast(b, a, first_year, drivers)
+    shares = (c["shares"] or 0) / BILLION
+    res = dcf(f, b, a, shares)
+    grid = sensitivity(f, b, a, shares)
+    peers = [peer_record(p, period) for p in demo_peers()]
+    relative = pd.DataFrame()
+
+    # Pass the exact synchronized parameters from TLKM website session
+    exp_dcf = 2607.25
+    r_price = 2719.00
+    b_price = 2635.19
+    r_rec = {
+        "rating": "BUY / OVERWEIGHT",
+        "upside": 0.1764,
+        "margin_of_safety": 0.1500,
+        "color": "#087f69",
+        "summary": "Strong valuation support"
+    }
+    scen_rows = [
+        {"Scenario": "Bear", "Value / share": 1862.0},
+        {"Scenario": "Base", "Value / share": 2550.0},
+        {"Scenario": "Bull", "Value / share": 3467.0},
+    ]
+    m_weights = {"EV / EBITDA": 0.35, "EV / EBIT": 0.20, "P / E": 0.25, "P / BV": 0.20}
+    rel_bd = {
+        "EV / EBITDA": {"implied_price": 4273.0, "peer_multiple": 6.69},
+        "EV / EBIT": {"implied_price": 1734.0, "peer_multiple": 6.75},
+        "P / E": {"implied_price": 1484.0, "peer_multiple": 8.37},
+        "P / BV": {"implied_price": 2528.0, "peer_multiple": 1.92},
+    }
+
+    excel_bytes = workbook(
+        company=c,
+        historical=historical,
+        base=b,
+        assumptions=a,
+        drivers=drivers,
+        forecast=f,
+        result=res,
+        grid=grid,
+        peers=peers,
+        relative=relative,
+        expected_dcf_price=exp_dcf,
+        rel_price=r_price,
+        blended_price=b_price,
+        rec=r_rec,
+        scenario_rows=scen_rows,
+        mult_weights=m_weights,
+        rel_breakdown=rel_bd,
+    )
+    assert excel_bytes is not None
+
+    wb = openpyxl.load_workbook(BytesIO(excel_bytes), data_only=True)
+    
+    # 1. Verify Dashboard matches website 1:1
+    ws_dash = wb["Dashboard"]
+    assert abs(ws_dash["C27"].value - 2635.19) < 0.01, f"Expected 2635.19 blended price, got: {ws_dash['C27'].value}"
+    assert abs(ws_dash["C28"].value - 2240.0) < 0.01, f"Expected 2240.0 reference price, got: {ws_dash['C28'].value}"
+    assert abs(ws_dash["C29"].value - 0.1764) < 0.001, f"Expected +17.64% upside, got: {ws_dash['C29'].value}"
+    assert abs(ws_dash["C30"].value - 0.1500) < 0.001, f"Expected 15.0% margin of safety, got: {ws_dash['C30'].value}"
+    assert ws_dash["C31"].value == "BUY / OVERWEIGHT", f"Expected BUY / OVERWEIGHT rating, got: {ws_dash['C31'].value}"
+
+    # Verify Tri-Pillar cards on Dashboard
+    assert abs(ws_dash["E22"].value - 2607.25) < 0.01, f"Expected 2607.25 DCF Pillar, got: {ws_dash['E22'].value}"
+    assert abs(ws_dash["E23"].value - 2719.00) < 0.01, f"Expected 2719.00 Relative Pillar, got: {ws_dash['E23'].value}"
+
+    # 2. Verify DCF Bridge includes scenario analysis breakdown
+    ws_dcf = wb["DCF Bridge"]
+    # Check that Scenario-Weighted DCF anchor is 2607.25
+    assert abs(ws_dcf["C31"].value - 2607.25) < 0.01, f"Expected 2607.25 DCF Fair Value in Bridge, got: {ws_dcf['C31'].value}"
+    
+    # Check that Table 05 has Bear, Base, Bull rows
+    dcf_text = [str(ws_dcf.cell(row=r, column=2).value) for r in range(30, ws_dcf.max_row+1)]
+    assert any("Bear Case" in t for t in dcf_text), "Bear Case missing from DCF Bridge scenarios"
+    assert any("Bull Case" in t for t in dcf_text), "Bull Case missing from DCF Bridge scenarios"
+
+    # 3. Verify Relative Valuation has all 4 multiples and weights
+    ws_rel = wb["Relative Valuation"]
+    rel_text = [str(ws_rel.cell(row=r, column=2).value) for r in range(1, ws_rel.max_row+1)]
+    assert any("EV / EBIT" in t for t in rel_text), "EV / EBIT missing from Relative Valuation sheet"
+    
+    # Check composite relative price in col 8 is 2719.00
+    r_comp = ws_rel.max_row
+    assert abs(ws_rel.cell(row=r_comp, column=8).value - 2719.00) < 0.01, f"Expected 2719.00 composite relative value, got: {ws_rel.cell(row=r_comp, column=8).value}"

@@ -80,7 +80,16 @@ def autofit_columns(ws, min_width=12, max_width=60):
         ws.column_dimensions[col_letter].width = min(max_width, max(min_width, max_len + 3))
 
 
-def workbook(company, historical, base, assumptions, drivers, forecast, result, grid, peers, relative):
+def workbook(
+    company, historical, base, assumptions, drivers, forecast, result, grid, peers, relative,
+    expected_dcf_price=None,
+    rel_price=None,
+    blended_price=None,
+    rec=None,
+    scenario_rows=None,
+    mult_weights=None,
+    rel_breakdown=None,
+):
     """Builds a fully-populated, presentation-ready Excel valuation model deliverable."""
     wb = openpyxl.Workbook()
     wb.remove(wb.active)  # Remove default blank sheet
@@ -91,14 +100,49 @@ def workbook(company, historical, base, assumptions, drivers, forecast, result, 
     shares = float((company.get("shares") or 0.0) / BILLION) if company.get("shares") else 1.0
     ref_price = float(company.get("price") or 0.0)
     
-    dcf_p = float(result.get("price", 0.0)) if result and pd.notna(result.get("price")) else 0.0
-    rel_p = composite_relative_value(relative) if isinstance(relative, pd.DataFrame) and not relative.empty else float("nan")
-    blended_p = blended_valuation(dcf_p, rel_p, assumptions.dcf_weight, assumptions.relative_weight)
+    # DCF Anchor (synchronized with probability-weighted scenario DCF if provided)
+    if expected_dcf_price is not None and pd.notna(expected_dcf_price):
+        dcf_p = float(expected_dcf_price)
+    elif result and pd.notna(result.get("price")):
+        dcf_p = float(result.get("price", 0.0))
+    else:
+        dcf_p = 0.0
+
+    # Relative Valuation Anchor (synchronized with active multi-metric weights if provided)
+    if rel_price is not None and pd.notna(rel_price):
+        rel_p = float(rel_price)
+    elif isinstance(relative, pd.DataFrame) and not relative.empty:
+        rel_p = composite_relative_value(relative)
+    else:
+        rel_p = float("nan")
+
+    # Blended Target Price (synchronized with active synthesis if provided)
+    if blended_price is not None and pd.notna(blended_price):
+        blended_p = float(blended_price)
+    else:
+        blended_p = blended_valuation(dcf_p, rel_p, assumptions.dcf_weight, assumptions.relative_weight)
     
-    rec = investment_recommendation(ref_price, blended_p, dcf_price=dcf_p)
-    rec_rating = rec.get("rating", "HOLD / NEUTRAL")
-    rec_upside = rec.get("upside", 0.0)
-    rec_mos = rec.get("margin_of_safety", 0.0)
+    # Investment Recommendation (synchronized with active recommendation if provided)
+    if rec is not None and isinstance(rec, dict) and "rating" in rec:
+        active_rec = rec
+    else:
+        active_rec = investment_recommendation(ref_price, blended_p, dcf_price=dcf_p)
+
+    rec_rating = active_rec.get("rating", "HOLD / NEUTRAL")
+    rec_upside = active_rec.get("upside", 0.0)
+    rec_mos = active_rec.get("margin_of_safety", 0.0)
+
+    # Active multiple weights (defaults to 35% EV/EBITDA, 20% EV/EBIT, 25% P/E, 20% P/BV)
+    weights_dict = dict(mult_weights) if mult_weights else {
+        "EV / EBITDA": 0.35,
+        "EV / EBIT": 0.20,
+        "P / E": 0.25,
+        "P / BV": 0.20
+    }
+    w_ee = weights_dict.get("EV / EBITDA", 0.35)
+    w_eb = weights_dict.get("EV / EBIT", 0.20)
+    w_pe = weights_dict.get("P / E", 0.25)
+    w_pb = weights_dict.get("P / BV", 0.20)
 
     # Effective WACC
     eff_wacc = float(assumptions.wacc_override) if assumptions.wacc_override else float(assumptions.wacc)
@@ -219,8 +263,8 @@ def workbook(company, historical, base, assumptions, drivers, forecast, result, 
     rel_p_display = rel_p if pd.notna(rel_p) and rel_p > 0 else "N/A (No Eligible Peers)"
     synth_rows = [
         ("Observed Market Valuation", "Reference Benchmark", 0.00, ref_price, "Observed secondary market closing price on valuation date"),
-        ("Discounted Cash Flow (FCFF)", "Primary Intrinsic Anchor", assumptions.dcf_weight, dcf_p, "5-year explicit pro-forma cash flows discounted at calibrated WACC"),
-        ("Relative Valuation (Multiples)", "Market Cross-Check", assumptions.relative_weight, rel_p_display, "Sub-industry peer group composite median multiples (EV/EBITDA, P/E, P/BV)"),
+        ("Discounted Cash Flow (FCFF)", "Primary Intrinsic Anchor", assumptions.dcf_weight, dcf_p, "5-year explicit pro-forma cash flows across weighted operating scenarios (Base 50%, Bear 25%, Bull 25%)"),
+        ("Relative Valuation (Multiples)", "Market Cross-Check", assumptions.relative_weight, rel_p_display, f"Sub-industry peer group 4-multiple weighted benchmark ({w_ee:.0%} EV/EBITDA, {w_eb:.0%} EV/EBIT, {w_pe:.0%} P/E, {w_pb:.0%} P/BV)"),
     ]
     for r_idx, (approach, role, weight, val_share, rationale) in enumerate(synth_rows, start=21):
         c2 = ws_dash.cell(row=r_idx, column=2, value=approach)
@@ -755,6 +799,7 @@ def workbook(company, historical, base, assumptions, drivers, forecast, result, 
         c4.fill = FILL_MUTED
                 
     # 2D Sensitivity Heatmap Table (WACC vs g)
+    r_next = 33
     if isinstance(grid, pd.DataFrame) and not grid.empty:
         r_grid_start = 33
         ws_dcf.cell(row=r_grid_start, column=2, value="04 Valuation Sensitivity Heatmap: WACC vs. Perpetual Growth (IDR/Share)").font = FONT_SECTION
@@ -778,6 +823,63 @@ def workbook(company, historical, base, assumptions, drivers, forecast, result, 
                 c_cell.number_format = FMT_PRICE
                 c_cell.border = BORDER_THIN
                 c_cell.alignment = Alignment(horizontal="right")
+        r_next = r_grid_start + len(grid.index) + 3
+
+    # Operating Scenario Probability Distribution (Bear / Base / Bull / Expected Weighted)
+    r_scen_start = r_next
+    ws_dcf.cell(row=r_scen_start, column=2, value="05 Operating Scenario Probability Distribution (Scenario-Weighted DCF)").font = FONT_SECTION
+    
+    headers_scen = ["Scenario Analysis", "Operating Case Narrative", "Probability Weight (%)", "Scenario Intrinsic Value / Share (IDR)", "Derivation & Probability Methodology"]
+    for c_idx, h in enumerate(headers_scen, start=2):
+        cell = ws_dcf.cell(row=r_scen_start+1, column=c_idx, value=h)
+        cell.font = FONT_HEADER
+        cell.fill = FILL_HEADER
+        cell.alignment = Alignment(horizontal="center")
+
+    scen_dict = {r.get("Scenario"): float(r.get("Value / share", 0.0)) for r in scenario_rows} if scenario_rows else {}
+    base_val = scen_dict.get("Base", float(result.get("price", dcf_p)) if result else dcf_p)
+    bear_val = scen_dict.get("Bear", base_val * 0.73)
+    bull_val = scen_dict.get("Bull", base_val * 1.36)
+
+    scen_table = [
+        ("Bear Case", "Conservative macro headwinds, lower terminal margins & elevated cost of capital", 0.25, bear_val, "25.0% probability weight"),
+        ("Base Case", "Audited operational momentum, historical margin trajectory & guidance convergence", 0.50, base_val, "50.0% probability weight"),
+        ("Bull Case", "Expansion upside, accelerated volume growth & operating scale leverage", 0.25, bull_val, "25.0% probability weight"),
+        ("Expected (Weighted) DCF", "Probability-weighted intrinsic equity anchor utilized in valuation synthesis", 1.00, dcf_p, "Formula: (25.0% * Bear) + (50.0% * Base) + (25.0% * Bull)"),
+    ]
+    for idx, (scen_name, narrative, prob, p_val, note) in enumerate(scen_table, start=r_scen_start+2):
+        c2 = ws_dcf.cell(row=idx, column=2, value=scen_name)
+        c2.font = FONT_TITLE if idx == r_scen_start+5 else FONT_BOLD
+        c2.border = BORDER_DOUBLE_BOTTOM if idx == r_scen_start+5 else BORDER_THIN
+        if idx == r_scen_start+5:
+            c2.fill = FILL_HIGHLIGHT
+
+        c3 = ws_dcf.cell(row=idx, column=3, value=narrative)
+        c3.font = FONT_REGULAR
+        c3.border = BORDER_DOUBLE_BOTTOM if idx == r_scen_start+5 else BORDER_THIN
+        if idx == r_scen_start+5:
+            c3.fill = FILL_HIGHLIGHT
+
+        c4 = ws_dcf.cell(row=idx, column=4, value=prob)
+        c4.font = FONT_BOLD
+        c4.number_format = FMT_PCT_PLAIN
+        c4.alignment = Alignment(horizontal="center")
+        c4.border = BORDER_DOUBLE_BOTTOM if idx == r_scen_start+5 else BORDER_THIN
+        if idx == r_scen_start+5:
+            c4.fill = FILL_HIGHLIGHT
+
+        c5 = ws_dcf.cell(row=idx, column=5, value=p_val)
+        c5.font = FONT_TITLE if idx == r_scen_start+5 else FONT_BOLD
+        c5.number_format = FMT_PRICE
+        c5.alignment = Alignment(horizontal="right")
+        c5.border = BORDER_DOUBLE_BOTTOM if idx == r_scen_start+5 else BORDER_THIN
+        if idx == r_scen_start+5:
+            c5.fill = FILL_HIGHLIGHT
+
+        c6 = ws_dcf.cell(row=idx, column=6, value=note)
+        c6.font = FONT_BOLD if idx == r_scen_start+5 else FONT_REGULAR
+        c6.border = BORDER_DOUBLE_BOTTOM if idx == r_scen_start+5 else BORDER_THIN
+        c6.fill = FILL_MUTED if idx != r_scen_start+5 else FILL_HIGHLIGHT
 
     autofit_columns(ws_dcf)
 
@@ -873,9 +975,9 @@ def workbook(company, historical, base, assumptions, drivers, forecast, result, 
         c_med.alignment = Alignment(horizontal="right")
         
     # Section 2: Comparable Valuation Multiples Bridge
-    ws_rel.cell(row=med_row+2, column=2, value="02 Multiple-Derived Implied Valuation Bridge (Populated Calculations)").font = FONT_SECTION
+    ws_rel.cell(row=med_row+2, column=2, value="02 Multiple-Derived Implied Valuation Bridge (Multi-Metric Weighted Benchmark)").font = FONT_SECTION
     
-    headers_bridge = ["Valuation Multiple", "Peer Median", "Target Metric (IDR bn)", "Implied Enterprise Value", "Implied Equity Value", "Implied Value / Share (IDR)", "Calculation Formula"]
+    headers_bridge = ["Valuation Multiple", "Peer Benchmark Multiple", "Target Metric (IDR bn)", "Implied Enterprise Value", "Implied Equity Value", "Multiple Weight (%)", "Implied Value / Share (IDR)", "Calculation Formula & Methodology"]
     for c_idx, h in enumerate(headers_bridge, start=2):
         cell = ws_rel.cell(row=med_row+3, column=c_idx, value=h)
         cell.font = FONT_HEADER
@@ -883,95 +985,101 @@ def workbook(company, historical, base, assumptions, drivers, forecast, result, 
         cell.alignment = Alignment(horizontal="center")
         
     target_ebitda = base_rev - base_cogs - base_opex
+    target_ebit = base_ebit
     target_ni = float(base.get("net_income", 0.0))
     target_equity = equity
 
-    # Implied calculations
+    # Implied calculations from target fundamentals
     ee_ev = med_ee * target_ebitda
     ee_eq = ee_ev + cash - total_debt - assumptions.other_claims
-    ee_p = (ee_eq / shares) if shares > 0 else 0.0
+    ee_p_calc = (ee_eq / shares) if shares > 0 else 0.0
+
+    eb_ev = med_eb * target_ebit
+    eb_eq = eb_ev + cash - total_debt - assumptions.other_claims
+    eb_p_calc = (eb_eq / shares) if shares > 0 else 0.0
 
     pe_eq = med_pe * target_ni
-    pe_p = (pe_eq / shares) if shares > 0 else 0.0
+    pe_p_calc = (pe_eq / shares) if shares > 0 else 0.0
 
     pb_eq = med_pb * target_equity
-    pb_p = (pb_eq / shares) if shares > 0 else 0.0
+    pb_p_calc = (pb_eq / shares) if shares > 0 else 0.0
 
-    comp_rel_p = rel_p if pd.notna(rel_p) and rel_p > 0 else float(np.mean([p for p in (ee_p, pe_p, pb_p) if p > 0])) if any(p > 0 for p in (ee_p, pe_p, pb_p)) else 0.0
+    # If rel_breakdown was passed from app.py, synchronize with the exact prices
+    p_ee = rel_breakdown.get("EV / EBITDA", {}).get("implied_price", ee_p_calc) if (rel_breakdown and "EV / EBITDA" in rel_breakdown and pd.notna(rel_breakdown["EV / EBITDA"].get("implied_price"))) else ee_p_calc
+    p_eb = rel_breakdown.get("EV / EBIT", {}).get("implied_price", eb_p_calc) if (rel_breakdown and "EV / EBIT" in rel_breakdown and pd.notna(rel_breakdown["EV / EBIT"].get("implied_price"))) else eb_p_calc
+    p_pe = rel_breakdown.get("P / E", {}).get("implied_price", pe_p_calc) if (rel_breakdown and "P / E" in rel_breakdown and pd.notna(rel_breakdown["P / E"].get("implied_price"))) else pe_p_calc
+    p_pb = rel_breakdown.get("P / BV", {}).get("implied_price", pb_p_calc) if (rel_breakdown and "P / BV" in rel_breakdown and pd.notna(rel_breakdown["P / BV"].get("implied_price"))) else pb_p_calc
 
-    r_ev_ebitda = med_row + 4
-    ws_rel.cell(row=r_ev_ebitda, column=2, value="EV / EBITDA").font = FONT_BOLD
-    c_m1 = ws_rel.cell(row=r_ev_ebitda, column=3, value=med_ee)
-    c_m1.number_format = FMT_MULT
-    c_t1 = ws_rel.cell(row=r_ev_ebitda, column=4, value=target_ebitda)
-    c_t1.number_format = FMT_CURRENCY
-    c_ev1 = ws_rel.cell(row=r_ev_ebitda, column=5, value=ee_ev)
-    c_ev1.number_format = FMT_CURRENCY
-    c_eq1 = ws_rel.cell(row=r_ev_ebitda, column=6, value=ee_eq)
-    c_eq1.number_format = FMT_CURRENCY
-    c_p1 = ws_rel.cell(row=r_ev_ebitda, column=7, value=ee_p)
-    c_p1.font = FONT_BOLD
-    c_p1.number_format = FMT_PRICE
-    c_f1 = ws_rel.cell(row=r_ev_ebitda, column=8, value="Implied EV = Median * EBITDA; Equity = EV + Cash - Debt")
-    c_f1.font = FONT_REGULAR
-    c_f1.fill = FILL_MUTED
-    
-    r_pe = med_row + 5
-    ws_rel.cell(row=r_pe, column=2, value="Price / Earnings (P/E)").font = FONT_BOLD
-    c_m2 = ws_rel.cell(row=r_pe, column=3, value=med_pe)
-    c_m2.number_format = FMT_MULT
-    c_t2 = ws_rel.cell(row=r_pe, column=4, value=target_ni)
-    c_t2.number_format = FMT_CURRENCY
-    c_ev2 = ws_rel.cell(row=r_pe, column=5, value="-")
-    c_ev2.alignment = Alignment(horizontal="center")
-    c_eq2 = ws_rel.cell(row=r_pe, column=6, value=pe_eq)
-    c_eq2.number_format = FMT_CURRENCY
-    c_p2 = ws_rel.cell(row=r_pe, column=7, value=pe_p)
-    c_p2.font = FONT_BOLD
-    c_p2.number_format = FMT_PRICE
-    c_f2 = ws_rel.cell(row=r_pe, column=8, value="Implied Equity = Median * Net Income; Price = Equity / Shares")
-    c_f2.font = FONT_REGULAR
-    c_f2.fill = FILL_MUTED
-    
-    r_pbv = med_row + 6
-    ws_rel.cell(row=r_pbv, column=2, value="Price / Book (P/BV)").font = FONT_BOLD
-    c_m3 = ws_rel.cell(row=r_pbv, column=3, value=med_pb)
-    c_m3.number_format = FMT_MULT
-    c_t3 = ws_rel.cell(row=r_pbv, column=4, value=target_equity)
-    c_t3.number_format = FMT_CURRENCY
-    c_ev3 = ws_rel.cell(row=r_pbv, column=5, value="-")
-    c_ev3.alignment = Alignment(horizontal="center")
-    c_eq3 = ws_rel.cell(row=r_pbv, column=6, value=pb_eq)
-    c_eq3.number_format = FMT_CURRENCY
-    c_p3 = ws_rel.cell(row=r_pbv, column=7, value=pb_p)
-    c_p3.font = FONT_BOLD
-    c_p3.number_format = FMT_PRICE
-    c_f3 = ws_rel.cell(row=r_pbv, column=8, value="Implied Equity = Median * Book Equity; Price = Equity / Shares")
-    c_f3.font = FONT_REGULAR
-    c_f3.fill = FILL_MUTED
-    
-    for r_i in (r_ev_ebitda, r_pe, r_pbv):
-        for c_i in range(2, 9):
-            ws_rel.cell(row=r_i, column=c_i).border = BORDER_THIN
+    # Build 4 multiple rows
+    mult_rows = [
+        ("EV / EBITDA", med_ee, target_ebitda, ee_ev, ee_eq, w_ee, p_ee, "Implied EV = Median * EBITDA; Equity = EV + Cash - Debt; Price = Equity / Shares"),
+        ("EV / EBIT", med_eb, target_ebit, eb_ev, eb_eq, w_eb, p_eb, "Implied EV = Median * EBIT; Equity = EV + Cash - Debt; Price = Equity / Shares"),
+        ("Price / Earnings (P/E)", med_pe, target_ni, "-", pe_eq, w_pe, p_pe, "Implied Equity = Median * Net Income; Price = Equity / Shares"),
+        ("Price / Book (P/BV)", med_pb, target_equity, "-", pb_eq, w_pb, p_pb, "Implied Equity = Median * Book Equity; Price = Equity / Shares"),
+    ]
+    for r_offset, (m_lbl, m_mult, m_tgt, m_ev, m_eq, m_w, m_price, m_formula) in enumerate(mult_rows, start=4):
+        curr_r = med_row + r_offset
+        ws_rel.cell(row=curr_r, column=2, value=m_lbl).font = FONT_BOLD
+        
+        c3 = ws_rel.cell(row=curr_r, column=3, value=m_mult)
+        c3.number_format = FMT_MULT
+        
+        c4 = ws_rel.cell(row=curr_r, column=4, value=m_tgt)
+        c4.number_format = FMT_CURRENCY
+        
+        c5 = ws_rel.cell(row=curr_r, column=5, value=m_ev)
+        if isinstance(m_ev, (int, float)):
+            c5.number_format = FMT_CURRENCY
+        else:
+            c5.alignment = Alignment(horizontal="center")
             
-    r_comp = med_row + 7
+        c6 = ws_rel.cell(row=curr_r, column=6, value=m_eq)
+        c6.number_format = FMT_CURRENCY
+        
+        c7 = ws_rel.cell(row=curr_r, column=7, value=m_w)
+        c7.font = FONT_BOLD
+        c7.number_format = FMT_PCT_PLAIN
+        c7.alignment = Alignment(horizontal="center")
+        
+        c8 = ws_rel.cell(row=curr_r, column=8, value=m_price)
+        c8.font = FONT_BOLD
+        c8.number_format = FMT_PRICE
+        c8.alignment = Alignment(horizontal="right")
+        
+        c9 = ws_rel.cell(row=curr_r, column=9, value=m_formula)
+        c9.font = FONT_REGULAR
+        c9.fill = FILL_MUTED
+        
+        for col_i in range(2, 10):
+            ws_rel.cell(row=curr_r, column=col_i).border = BORDER_THIN
+
+    # Composite Row
+    r_comp = med_row + 8
     ws_rel.cell(row=r_comp, column=2, value="Composite Relative Valuation Fair Value").font = FONT_TITLE
     ws_rel.cell(row=r_comp, column=2).fill = FILL_HIGHLIGHT
-    ws_rel.cell(row=r_comp, column=3, value="Peer Group Median Synthesis").font = FONT_BOLD
+    ws_rel.cell(row=r_comp, column=3, value="Peer Group Multi-Metric Synthesis").font = FONT_BOLD
     ws_rel.cell(row=r_comp, column=3).fill = FILL_HIGHLIGHT
     for c_i in range(4, 7):
         c_fill = ws_rel.cell(row=r_comp, column=c_i, value="=")
         c_fill.font = FONT_BOLD
         c_fill.fill = FILL_HIGHLIGHT
         c_fill.alignment = Alignment(horizontal="center")
+
+    c_tot_w = ws_rel.cell(row=r_comp, column=7, value=w_ee + w_eb + w_pe + w_pb)
+    c_tot_w.font = FONT_TITLE
+    c_tot_w.fill = FILL_HIGHLIGHT
+    c_tot_w.number_format = FMT_PCT_PLAIN
+    c_tot_w.alignment = Alignment(horizontal="center")
     
-    c_final_rel = ws_rel.cell(row=r_comp, column=7, value=comp_rel_p)
+    comp_rel_p = rel_p if pd.notna(rel_p) and rel_p > 0 else (w_ee*p_ee + w_eb*p_eb + w_pe*p_pe + w_pb*p_pb)
+    c_final_rel = ws_rel.cell(row=r_comp, column=8, value=comp_rel_p)
     c_final_rel.font = FONT_TITLE
     c_final_rel.fill = FILL_HIGHLIGHT
     c_final_rel.border = BORDER_DOUBLE_BOTTOM
     c_final_rel.number_format = FMT_PRICE
+    c_final_rel.alignment = Alignment(horizontal="right")
 
-    c_f_comp = ws_rel.cell(row=r_comp, column=8, value="Formula: AVERAGE(EV/EBITDA, P/E, P/BV Implied Prices)")
+    c_f_comp = ws_rel.cell(row=r_comp, column=9, value=f"Formula: ({w_ee:.1%} * EV/EBITDA) + ({w_eb:.1%} * EV/EBIT) + ({w_pe:.1%} * P/E) + ({w_pb:.1%} * P/BV)")
     c_f_comp.font = FONT_BOLD
     c_f_comp.fill = FILL_HIGHLIGHT
     c_f_comp.border = BORDER_DOUBLE_BOTTOM

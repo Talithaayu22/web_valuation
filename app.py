@@ -1194,7 +1194,25 @@ with overview:
                     use_container_width=True
                 )
             if result:
-                excel_bytes = workbook(c, historical, b, a, drivers, f, result, grid, peer_rows, relative)
+                excel_bytes = workbook(
+                    company=c,
+                    historical=historical,
+                    base=b,
+                    assumptions=a,
+                    drivers=drivers,
+                    forecast=f,
+                    result=result,
+                    grid=grid,
+                    peers=peer_rows,
+                    relative=relative,
+                    expected_dcf_price=expected_dcf_price,
+                    rel_price=rel_price,
+                    blended_price=blended_price,
+                    rec=rec,
+                    scenario_rows=scenario_rows,
+                    mult_weights=mult_weights_norm,
+                    rel_breakdown=rel_breakdown,
+                )
                 st.download_button(
                     label="Export Excel (.xlsx)",
                     data=excel_bytes,
@@ -1854,7 +1872,25 @@ with st.sidebar:
         except (ValueError, TypeError) as exc:
             st.error(f"Could not save: {exc}")
     if result:
-        download = workbook(c, historical, b, a, drivers, f, result, grid, peer_rows, relative)
+        download = workbook(
+            company=c,
+            historical=historical,
+            base=b,
+            assumptions=a,
+            drivers=drivers,
+            forecast=f,
+            result=result,
+            grid=grid,
+            peers=peer_rows,
+            relative=relative,
+            expected_dcf_price=expected_dcf_price,
+            rel_price=rel_price,
+            blended_price=blended_price,
+            rec=rec,
+            scenario_rows=scenario_rows,
+            mult_weights=mult_weights_norm,
+            rel_breakdown=rel_breakdown,
+        )
         st.download_button("Export Excel snapshot", download, file_name=f"{c['symbol']}_valuation.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
     st.caption("Refresh data")
     if st.button("Clear cached Yahoo data", width="stretch"):
