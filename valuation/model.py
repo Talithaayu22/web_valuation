@@ -300,10 +300,16 @@ def infer_assumptions(historical, b, company=None):
         if mkt_cap > 0 and tot_debt >= 0:
             a.debt_weight = max(0.0, min(0.90, tot_debt / (tot_debt + mkt_cap)))
 
-    # Borrowing cost from effective interest rate
+    # Borrowing cost from effective interest rate with Damodaran local-currency floor (Kd >= Rf + credit spread)
     if tot_debt > 0 and b.get("interest", 0) > 0:
         eff_debt_rate = b["interest"] / tot_debt
-        if 0.04 <= eff_debt_rate <= 0.20:
+        # Damodaran Consistency Rule: In a local-currency DCF, pre-tax Kd cannot fall below the sovereign Risk-Free rate.
+        # When offshore debt (e.g. USD coupons) or concessionary loans depress book interest below Rf, enforce the economic floor:
+        corporate_spread = 0.0150  # 150 bps investment-grade corporate credit spread over sovereign bond
+        kd_floor = round(a.risk_free + corporate_spread, 4)
+        if eff_debt_rate < a.risk_free:
+            a.debt_rate = kd_floor
+        elif eff_debt_rate <= 0.20:
             a.debt_rate = round(eff_debt_rate, 4)
 
     # Blume's mean-reversion adjusted Beta with institutional floor (Damodaran CAPM alignment)

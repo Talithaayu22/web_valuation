@@ -1212,7 +1212,7 @@ with assumptions_tab:
                 fields["beta"] = st.number_input("Levered beta", min_value=-2.0, max_value=4., value=float(initial.beta), step=.05, key=key("beta"), help="Derived from 5Y monthly regression vs ^JKSE with Blume mean-reversion adjustment.")
                 pct(
                     "Pre-tax borrowing cost (%)", "debt_rate", 0, 50,
-                    help="Effective pre-tax debt borrowing rate (Kd = Interest Expense / Total Debt). Reflects weighted average coupon rate on commercial bank borrowings and corporate bonds."
+                    help="Effective pre-tax debt borrowing rate (Kd = Interest Expense / Total Debt). In accordance with Damodaran currency consistency rules, Kd is floored at sovereign Rf + 150 bps corporate spread if reported rates reflect offshore foreign-currency (e.g. USD) obligations."
                 )
                 pct(
                     "Target debt / capital (%)", "debt_weight", 0, 95,

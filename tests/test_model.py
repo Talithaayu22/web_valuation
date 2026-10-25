@@ -1193,3 +1193,28 @@ def test_growth_assumption_archetypes_distinction():
     expected_cagr = (80000.0 / 60000.0)**(1/3) - 1.0
     assert a_growth.growth == pytest.approx(expected_cagr)
     assert a_growth.growth_archetype == "organic_cagr"
+
+
+def test_damodaran_cost_of_debt_floor_enforcement():
+    # Case 1: Effective rate below Rf (e.g. USD Pinehill debt at 4.54% vs Rf 6.64%) -> floored at Rf + 150 bps
+    h = pd.DataFrame({
+        "2025-12-31": {"revenue": 70000.0, "cogs": 45000.0, "opex": 10000.0, "da": 2000.0}
+    })
+    b_offshore = {
+        "revenue": 70000.0, "cogs": 45000.0, "opex": 10000.0, "da": 2000.0,
+        "short_debt": 2000.0, "long_debt": 40000.0, # Total debt = 42,000
+        "interest": 1890.0, # 1890 / 42000 = 4.5% (< 6.64%)
+    }
+    co = {"symbol": "ICBP.JK", "price": 6000.0, "shares": 10e9}
+    a = infer_assumptions(h, b_offshore, co)
+    assert a.debt_rate == pytest.approx(round(a.risk_free + 0.0150, 4))
+    assert a.debt_rate >= a.risk_free
+
+    # Case 2: Effective rate above Rf (e.g. 8.5% domestic bank debt > 6.64%) -> retains commercial rate
+    b_domestic = {
+        "revenue": 70000.0, "cogs": 45000.0, "opex": 10000.0, "da": 2000.0,
+        "short_debt": 2000.0, "long_debt": 40000.0, # Total debt = 42,000
+        "interest": 3570.0, # 3570 / 42000 = 8.5% (> 6.64%)
+    }
+    a_dom = infer_assumptions(h, b_domestic, co)
+    assert a_dom.debt_rate == pytest.approx(0.0850)
