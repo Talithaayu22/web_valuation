@@ -511,12 +511,12 @@ IDX_INDUSTRY_PEERS = {
     "Farm Products": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP", "BWPT", "SSMS"],
     "Agricultural Inputs": ["TAPG", "AALI", "LSIP", "DSNG", "SIMP"],
     # Telecom Services (IDX-IC Industry Group J3: Telecommunication Services)
-    # Operating Mobile & Integrated Telecom Carriers (excluding tower infrastructure companies)
-    "Integrated Telecommunication Service": ["ISAT", "EXCL", "LINK", "MORA"],
-    "Wireless Telecommunication Services": ["ISAT", "EXCL", "TLKM", "LINK", "MORA"],
-    "Wired Telecommunication Service": ["LINK", "MORA", "TLKM", "ISAT", "EXCL"],
-    "Telecommunication Services": ["TLKM", "ISAT", "EXCL", "LINK", "MORA"],
-    "Telecom Services": ["TLKM", "ISAT", "EXCL", "LINK", "MORA"],
+    # Pure-play Mobile Network Operators (MNO) & Integrated Telecom Carriers (excluding tower firms & small wired operators)
+    "Integrated Telecommunication Service": ["ISAT", "EXCL"],
+    "Wireless Telecommunication Services": ["ISAT", "EXCL", "TLKM"],
+    "Wired Telecommunication Service": ["LINK", "MORA"],
+    "Telecommunication Services": ["TLKM", "ISAT", "EXCL"],
+    "Telecom Services": ["TLKM", "ISAT", "EXCL"],
     # Telecommunication Tower Infrastructure (Separated from operating carriers)
     "Telecommunication Towers": ["TOWR", "TBIG", "MTEL", "CENT", "IBST"],
 }
@@ -526,11 +526,17 @@ def get_default_peers_for_ticker(symbol, industry=None):
     """Returns candidate peer tickers for a given symbol based on official IDX sub-industry mapping.
     Industry/Sub-industry is sourced strictly from 'book/Company LIsted on IDX.xlsx'.
     For singleton or small sub-industries (such as TLKM's 'Integrated Telecommunication Service'),
-    peers are matched with sibling companies within the same official 2-digit IDX-IC Industry Group
-    (e.g. 'J3' Telecommunication Services: ISAT, EXCL, LINK, MORA), strictly avoiding
-    unrelated sub-industries like Toll Roads or Airports.
+    peers are matched with direct operating competitors (ISAT, EXCL), strictly excluding
+    tower infrastructure companies (TOWR, TBIG, MTEL) and small niche wired operators.
     """
     clean = symbol.replace(".JK", "").upper()
+    if clean == "TLKM":
+        return ["ISAT", "EXCL"]
+    if clean == "ISAT":
+        return ["EXCL", "TLKM"]
+    if clean == "EXCL":
+        return ["ISAT", "TLKM"]
+
     ticker_map, sub_ind_map, sector_map, group_map = load_idx_company_registry(include_groups=True)
 
     candidates = []

@@ -1029,11 +1029,12 @@ def test_official_idx_excel_registry_and_peer_matching():
     assert tlkm_meta["group_code"] == "J3"
 
     tlkm_peers = get_default_peers_for_ticker("TLKM.JK")
-    assert "ISAT" in tlkm_peers
-    assert "EXCL" in tlkm_peers
+    assert tlkm_peers == ["ISAT", "EXCL"]
     assert "TOWR" not in tlkm_peers
     assert "TBIG" not in tlkm_peers
     assert "MTEL" not in tlkm_peers
+    assert "LINK" not in tlkm_peers
+    assert "MORA" not in tlkm_peers
     assert "CASS" not in tlkm_peers
     assert "CMNP" not in tlkm_peers
     assert "GMFI" not in tlkm_peers
