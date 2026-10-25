@@ -63,6 +63,8 @@ class Assumptions:
     dcf_weight: float = 0.75
     relative_weight: float = 0.25
     scenario_shift: float = 0.02
+    growth_archetype: str = "organic_cagr"
+    historical_cagr: float | None = None
     scenario_mode: str = "Coherent Macro & Operating World"
     bear_growth_shift: float = -0.02
     bull_growth_shift: float = 0.02
@@ -245,28 +247,38 @@ def infer_assumptions(historical, b, company=None):
             sec = (company.get("sector") or "") if company else ""
             ind = (company.get("industry") or "") if company else ""
             is_cyclical = (
-                sec in ("Energy", "Basic Materials") or 
-                any(x in ind.lower() for x in ("coal", "mining", "metal", "oil", "gas", "farm products", "agriculture", "plantation", "crop", "cooper"))
+                (sec in ("Energy", "Basic Materials") or 
+                 any(x in ind.lower() for x in ("coal", "mining", "metal", "oil", "gas", "farm products", "agriculture", "plantation", "crop", "cooper")))
+                if company is not None else True
             )
 
             if len(s) >= 4 and s.iloc[-4] > 0 and s.iloc[-1] > 0:
                 cagr3 = (float(s.iloc[-1]) / float(s.iloc[-4])) ** (1.0 / 3.0) - 1.0
+                a.historical_cagr = cagr3
                 if is_cyclical and cagr3 < 0.02:
                     # Damodaran Cyclical Commodity Normalization: Post-peak price corrections
                     # artificially depress trailing CAGR. Normalize to core Indonesian nominal baseline (3.5%).
                     a.growth = 0.035
-                elif cagr3 < 0:
-                    a.growth = 0.035
+                    a.growth_archetype = "commodity_cycle"
+                elif not is_cyclical and cagr3 < 0:
+                    # Non-commodity mature stagnation benchmark (Option A: Bank Indonesia long-term inflation target 2.5%)
+                    a.growth = 0.025
+                    a.growth_archetype = "macro_mature"
                 else:
                     a.growth = max(0.0, min(0.35, cagr3))
+                    a.growth_archetype = "organic_cagr"
             elif len(s) >= 2 and s.iloc[-2] > 0 and s.iloc[-1] > 0:
                 yoy = (float(s.iloc[-1]) / float(s.iloc[-2])) - 1.0
+                a.historical_cagr = yoy
                 if is_cyclical and yoy < 0.02:
                     a.growth = 0.035
-                elif yoy < 0:
-                    a.growth = 0.035
+                    a.growth_archetype = "commodity_cycle"
+                elif not is_cyclical and yoy < 0:
+                    a.growth = 0.025
+                    a.growth_archetype = "macro_mature"
                 else:
                     a.growth = max(0.0, min(0.35, yoy))
+                    a.growth_archetype = "organic_cagr" 
 
     # Depreciation rate on PPE
     if b.get("ppe", 0) > 0:

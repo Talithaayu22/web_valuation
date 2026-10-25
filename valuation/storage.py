@@ -1,10 +1,11 @@
 """Local-only saved analyses. No credentials or remote writes."""
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB = Path(__file__).resolve().parents[1]/"data"/"analyses.sqlite3"
+DB = Path(os.environ.get("VALUATION_DB", Path(__file__).resolve().parents[1]/"data"/"analyses.sqlite3"))
 
 
 def connection():

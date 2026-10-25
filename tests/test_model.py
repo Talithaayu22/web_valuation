@@ -1152,3 +1152,44 @@ def test_multiple_outlier_clamping_and_exclusion_reasons():
     assert any("PACK (extreme multiple outlier" in reason for reason in excl["EV / EBIT"])
     assert any("PACK (extreme multiple outlier" in reason for reason in excl["P / E"])
     assert any("PACK (extreme multiple outlier" in reason for reason in excl["P / BV"])
+
+
+
+def test_growth_assumption_archetypes_distinction():
+    from valuation.model import infer_assumptions
+
+    # Case 1: Cyclical Commodity with negative CAGR -> 3.5% with commodity_cycle archetype
+    h_cyclical = pd.DataFrame({
+        "2022-12-31": {"revenue": 10000.0, "cogs": 7000.0, "opex": 500.0, "da": 300.0},
+        "2025-12-31": {"revenue": 8000.0, "cogs": 6000.0, "opex": 500.0, "da": 300.0},
+    })
+    b_cyclical = {"revenue": 8000.0, "cogs": 6000.0, "opex": 500.0, "da": 300.0}
+    co_cyclical = {"symbol": "ADRO.JK", "sector": "Energy", "industry": "Thermal Coal"}
+    a_cyclical = infer_assumptions(h_cyclical, b_cyclical, co_cyclical)
+    assert a_cyclical.growth == pytest.approx(0.035)
+    assert a_cyclical.growth_archetype == "commodity_cycle"
+
+    # Case 2: Non-Cyclical Mature with negative CAGR (like TLKM) -> 2.5% with macro_mature archetype
+    h_mature = pd.DataFrame({
+        "2022-12-31": {"revenue": 147306.0, "cogs": 41812.0, "opex": 62000.0, "da": 32000.0},
+        "2025-12-31": {"revenue": 146743.0, "cogs": 42000.0, "opex": 63000.0, "da": 32000.0},
+    })
+    b_mature = {"revenue": 146743.0, "cogs": 42000.0, "opex": 63000.0, "da": 32000.0}
+    co_mature = {"symbol": "TLKM.JK", "sector": "Infrastructure", "industry": "Integrated Telecommunication Services"}
+    a_mature = infer_assumptions(h_mature, b_mature, co_mature)
+    assert a_mature.growth == pytest.approx(0.025)
+    assert a_mature.growth_archetype == "macro_mature"
+
+    # Case 3: Organic Growth company with positive CAGR -> historical CAGR with organic_cagr archetype
+    h_growth = pd.DataFrame({
+        "2022-12-31": {"revenue": 60000.0, "cogs": 38000.0, "opex": 8000.0, "da": 2000.0},
+        "2023-12-31": {"revenue": 66000.0, "cogs": 42000.0, "opex": 8500.0, "da": 2100.0},
+        "2024-12-31": {"revenue": 72000.0, "cogs": 46000.0, "opex": 9000.0, "da": 2300.0},
+        "2025-12-31": {"revenue": 80000.0, "cogs": 50000.0, "opex": 10000.0, "da": 2500.0},
+    })
+    b_growth = {"revenue": 80000.0, "cogs": 50000.0, "opex": 10000.0, "da": 2500.0}
+    co_growth = {"symbol": "ICBP.JK", "sector": "Consumer Non-Cyclicals", "industry": "Processed Foods"}
+    a_growth = infer_assumptions(h_growth, b_growth, co_growth)
+    expected_cagr = (80000.0 / 60000.0)**(1/3) - 1.0
+    assert a_growth.growth == pytest.approx(expected_cagr)
+    assert a_growth.growth_archetype == "organic_cagr"

@@ -17,7 +17,9 @@ def test_demo_renders_and_assumptions_update():
 
 def test_save_and_reopen_restores_assumptions(tmp_path,monkeypatch):
     from valuation import storage
-    monkeypatch.setattr(storage,"DB",tmp_path/"analyses.sqlite3")
+    db_file = tmp_path / "analyses.sqlite3"
+    monkeypatch.setenv("VALUATION_DB", str(db_file))
+    monkeypatch.setattr(storage, "DB", db_file)
     app = AppTest.from_file(Path(__file__).resolve().parents[1]/"app.py",default_timeout=30).run()
     next(n for n in app.number_input if n.label == "Growth · years 1–3 (%)").set_value(11.)
     next(b for b in app.button if b.label == "Apply assumptions").click().run()

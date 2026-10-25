@@ -966,11 +966,37 @@ with assumptions_tab:
                     elif len(s_rev) >= 2 and s_rev.iloc[-2] > 0 and s_rev.iloc[-1] > 0:
                         cagr_hist = (float(s_rev.iloc[-1]) / float(s_rev.iloc[-2])) - 1.0
 
-                is_normalized = (abs(initial.growth - 0.035) < 0.0001 and cagr_hist is not None and (cagr_hist < 0.02 or abs(cagr_hist - 0.035) > 0.005))
-                if is_normalized:
-                    growth_help = f"Normalized to 3.5% via Damodaran cyclical commodity framework (trailing audited 3-year CAGR was {cagr_hist:.1%}). In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
+                sec_raw = (c.get("sector") or "") if c else ""
+                ind_raw = (c.get("industry") or "") if c else ""
+                is_cyclical = (
+                    sec_raw in ("Energy", "Basic Materials") or 
+                    any(x in ind_raw.lower() for x in ("coal", "mining", "metal", "oil", "gas", "farm products", "agriculture", "plantation", "crop", "cooper"))
+                )
+                archetype = getattr(initial, "growth_archetype", None)
+                if not archetype:
+                    if is_cyclical and cagr_hist is not None and cagr_hist < 0.02:
+                        archetype = "commodity_cycle"
+                    elif not is_cyclical and cagr_hist is not None and cagr_hist < 0.0:
+                        archetype = "macro_mature"
+                    else:
+                        archetype = "organic_cagr"
+
+                if archetype == "commodity_cycle":
+                    growth_help = (
+                        f"Normalized to {initial.growth:.1%} via Damodaran Cyclical Commodity framework (trailing audited 3-year CAGR was {cagr_hist:.1%} "
+                        f"due to commodity price cycle trough). In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
+                    )
+                elif archetype == "macro_mature":
+                    growth_help = (
+                        f"Normalized to {initial.growth:.1%} via Indonesia Macro & Mature Industry framework (trailing audited 3-year CAGR was {cagr_hist:.1%} "
+                        f"due to mature market saturation/price competition, rather than commodity cycles). Anchored to Bank Indonesia's long-term macro inflation baseline (2.50%). "
+                        f"In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
+                    )
                 else:
-                    growth_help = f"Anchored to audited 3-year historical revenue CAGR ({initial.growth:.1%}). In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
+                    growth_help = (
+                        f"Anchored to audited 3-year historical revenue CAGR ({initial.growth:.1%}). "
+                        f"In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
+                    )
 
                 pct(
                     "Growth · years 1–3 (%)", "growth", -50, 100,
