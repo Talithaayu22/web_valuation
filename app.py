@@ -268,6 +268,136 @@ div[data-testid="column"] > div:has([data-testid="stMetric"]) {
     div[data-testid="column"]:has([data-testid="stMetric"]) { min-width: 100% !important; flex: 1 1 100% !important; }
 }
 
+/* --- Level 3 Primary Navigation: Apple iOS Segmented Control Bar --- */
+.st-key-main_nav_container {
+    margin-top: 4px !important;
+    margin-bottom: 6px !important;
+}
+
+/* Shared rounded container for the 3 navigation segments */
+.st-key-main_nav_container > div[data-testid="stTabs"] > div[data-baseweb="tab-list"],
+div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] > div[data-baseweb="tab-list"] {
+    background-color: #EFEFF4 !important;
+    padding: 4px !important;
+    border-radius: 14px !important;
+    border: 1px solid #E5E5EA !important;
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    gap: 4px !important;
+    margin-bottom: 12px !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+    max-width: 620px !important;
+    width: 100% !important;
+}
+
+/* Remove default Streamlit tab underline / highlight bar on primary nav */
+.st-key-main_nav_container > div[data-testid="stTabs"] [data-baseweb="tab-border"],
+.st-key-main_nav_container > div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] [data-baseweb="tab-border"],
+div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] [data-baseweb="tab-highlight"] {
+    display: none !important;
+}
+
+/* Individual navigation segments */
+.st-key-main_nav_container > div[data-testid="stTabs"] button[data-baseweb="tab"],
+div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] button[data-baseweb="tab"] {
+    flex: 1 1 0 !important;
+    text-align: center !important;
+    justify-content: center !important;
+    align-items: center !important;
+    display: inline-flex !important;
+    padding: 9px 18px !important;
+    height: auto !important;
+    min-height: 40px !important;
+    border-radius: 10px !important;
+    border: 1px solid transparent !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    color: #6E6E73 !important;
+    background: transparent !important;
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+}
+
+/* Hover feedback on inactive segments */
+.st-key-main_nav_container > div[data-testid="stTabs"] button[data-baseweb="tab"]:hover,
+div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] button[data-baseweb="tab"]:hover {
+    color: #1D1D1F !important;
+    background: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Active Segment (Selected Section) */
+.st-key-main_nav_container > div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"],
+div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] {
+    background-color: #FFFFFF !important;
+    color: #1D1D1F !important;
+    font-weight: 650 !important;
+    border: 1px solid rgba(0, 0, 0, 0.04) !important;
+    border-bottom: 2.5px solid #087F69 !important; /* Restrained green accent */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 0.5px 1.5px rgba(0, 0, 0, 0.03) !important;
+}
+
+.st-key-main_nav_container > div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] p,
+div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] p {
+    color: #1D1D1F !important;
+    font-weight: 650 !important;
+}
+
+.st-key-main_nav_container > div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="false"] p,
+div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="false"] p {
+    color: #6E6E73 !important;
+    font-weight: 500 !important;
+}
+
+/* --- Level 4: Current Page Context Banner --- */
+.page-context-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 15px;
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
+    border-left: 3.5px solid #087F69;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.page-context-title {
+    font-weight: 650;
+    color: #1D1D1F;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
+.page-context-desc {
+    color: #6E6E73;
+}
+
+@media (max-width: 680px) {
+    .st-key-main_nav_container > div[data-testid="stTabs"] > div[data-baseweb="tab-list"],
+    div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] > div[data-baseweb="tab-list"] {
+        max-width: 100% !important;
+    }
+    .st-key-main_nav_container > div[data-testid="stTabs"] button[data-baseweb="tab"],
+    div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] button[data-baseweb="tab"] {
+        padding: 7px 10px !important;
+        font-size: 12.5px !important;
+        min-height: 36px !important;
+    }
+    .page-context-banner {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+        padding: 8px 12px;
+    }
+}
+
 .eyebrow { color: #087F69; font-size: 11.5px; font-weight: 700; letter-spacing: 1.5px; margin-bottom: 4px; text-transform: uppercase; }
 .badge { display: inline-block; background: #E6F4F1; color: #087F69; padding: 4px 12px; border-radius: 999px; font-size: 11.5px; font-weight: 600; border: 1px solid #B7E1D7; }
 .hero { padding: 18px 22px; background: #FFFFFF; color: #1D1D1F; border: 1px solid #E5E5EA; border-radius: 14px; margin: 8px 0 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.03); }
@@ -764,14 +894,22 @@ else:
         st.warning("This version models non-financial operating companies. Banks, insurers, and REITs need a dedicated valuation model. Choose another company.")
         st.stop()
 
-# Three Main Navigation Sections (Top-Level Architecture)
-overview, valuation_lab_tab, report_tab = st.tabs([
-    "Overview",
-    "Valuation Lab",
-    "Research Report",
-])
+# Three Main Navigation Sections (Level 3 Primary Architecture)
+with st.container(key="main_nav_container"):
+    overview, valuation_lab_tab, report_tab = st.tabs([
+        "Overview",
+        "Valuation Lab",
+        "Research Report",
+    ])
 
 with valuation_lab_tab:
+    st.markdown(
+        '<div class="page-context-banner">'
+        '<span class="page-context-title">Valuation Lab — Interactive Analysis</span>'
+        '<span class="page-context-desc">Review financial data, customize assumptions, select peers, and run valuation scenarios.</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     st.markdown(
         "<div style='background:#FFFFFF; border:1px solid #E5E5EA; border-radius:12px; padding:10px 16px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;'>"
         "<div><span class='ios-section-label'>VALUATION LAB WORKFLOW</span> "
@@ -1633,6 +1771,13 @@ except Exception as _export_prep_err:
     pass
 
 with overview:
+    st.markdown(
+        '<div class="page-context-banner">'
+        '<span class="page-context-title">Overview — Investment Snapshot</span>'
+        '<span class="page-context-desc">Understand the company, market price, fair value, and investment recommendation.</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     st.subheader("Executive Valuation Overview")
 
     # 1. Investment Summary & Decision Hero Row (Level 1 — Decision)
@@ -2836,6 +2981,13 @@ with final_interp_tab:
 # SECTION 3: RESEARCH REPORT & EXPORT
 # ═════════════════════════════════════════════════════════════════════════════
 with report_tab:
+    st.markdown(
+        '<div class="page-context-banner">'
+        '<span class="page-context-title">Research Report — Results & Export</span>'
+        '<span class="page-context-desc">Review valuation conclusions, methodology, key risks, and downloadable reports.</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     st.subheader("Institutional Equity Research Report & Deliverables Export")
     st.caption(
         f"Valuation report for {clean_name} ({c['symbol']}) · "
