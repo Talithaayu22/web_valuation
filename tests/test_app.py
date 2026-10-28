@@ -149,3 +149,34 @@ def test_overview_assumptions_and_risks_cards_refinement():
     assert "Terminal Value Exposure" in rendered_markdown
     assert "View All Risks &amp; Audits &rarr;" in rendered_markdown
 
+
+def test_shared_table_design_system_and_historical_statements():
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py", default_timeout=30).run()
+    assert not app.exception
+    rendered_markdown = " ".join(x.value for x in app.markdown)
+
+    # 1. Universal table container and shared table classes
+    assert "fin-table-container" in rendered_markdown
+    assert "fin-table" in rendered_markdown
+    assert "fin-table-header-bar" in rendered_markdown
+    assert "fin-table-title" in rendered_markdown
+    assert "fin-table-unit" in rendered_markdown
+
+    # 2. Historical financial statements rendered with two-tier headers
+    assert "Consolidated Historical Accounts" in rendered_markdown
+    assert "Historical Income Statement" in rendered_markdown
+    assert "Historical Balance Sheet" in rendered_markdown
+    assert "th-main" in rendered_markdown
+
+    # 3. Row hierarchy classes
+    assert "row-major" in rendered_markdown
+    assert "row-subtotal" in rendered_markdown
+
+    # 4. Status badges in model validation and peer screening
+    assert "fin-badge" in rendered_markdown
+    assert "fin-badge-pass" in rendered_markdown
+
+    # 5. Comparable peers and scenario analysis tables
+    assert "Comparable Peers Screening &amp; Financial Comparability" in rendered_markdown
+    assert "Scenario Valuation Matrix &amp; Operating Case Trajectory" in rendered_markdown
+

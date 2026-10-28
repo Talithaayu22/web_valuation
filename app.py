@@ -13,12 +13,14 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # Explicitly reload valuation submodules to prevent stale sys.modules caching in Streamlit
-for _mod_name in ("valuation.model", "valuation.data", "valuation.report_pdf", "valuation.export", "valuation.storage"):
+for _mod_name in ("valuation.model", "valuation.data", "valuation.report_pdf", "valuation.export", "valuation.storage", "valuation.ui_table"):
     if _mod_name in sys.modules:
         try:
             importlib.reload(sys.modules[_mod_name])
         except Exception:
             pass
+
+from valuation.ui_table import render_apple_table
 
 try:
     from valuation.data import clean_company_name, format_wib_retrieval
@@ -1069,6 +1071,245 @@ button { border-radius: 10px !important; }
     text-decoration: underline;
     color: #065F4E;
 }
+
+/* ==========================================================================
+   SHARED FINANCIAL TABLE DESIGN SYSTEM (Apple iOS-Inspired Institutional)
+   ========================================================================== */
+
+/* Universal Table Wrapper */
+.fin-table-container {
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    overflow: hidden;
+    margin: 10px 0 16px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.fin-table-header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px 8px;
+    background: #FAFAFC;
+    border-bottom: 1px solid #E5E5EA;
+}
+
+.fin-table-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1D1D1F;
+    letter-spacing: -0.01em;
+}
+
+.fin-table-unit {
+    font-size: 11px;
+    font-weight: 500;
+    color: #6E6E73;
+    letter-spacing: 0.02em;
+}
+
+.fin-table-scroll {
+    overflow-x: auto;
+    width: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: #D1D1D6 #F5F5F7;
+}
+
+/* Base Financial Table */
+.fin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    color: #1D1D1F;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    line-height: 1.4;
+}
+
+/* Header Cells */
+.fin-table th {
+    background: #F8F9FA;
+    color: #6E6E73;
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 9px 12px;
+    border-bottom: 1.5px solid #E5E5EA;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.fin-table th.col-label {
+    text-align: left;
+    min-width: 190px;
+}
+
+.fin-table th.col-num {
+    text-align: right;
+    min-width: 105px;
+}
+
+.fin-table th.col-center {
+    text-align: center;
+}
+
+.fin-table th .th-main {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #1D1D1F;
+}
+
+.fin-table th .th-sub {
+    font-size: 10px;
+    font-weight: 500;
+    color: #8E8E93;
+    text-transform: none;
+    letter-spacing: 0;
+    margin-top: 1px;
+}
+
+/* Body Cells */
+.fin-table td {
+    padding: 7.5px 12px;
+    border-bottom: 1px solid #F2F2F7;
+    color: #1D1D1F;
+    font-size: 12px;
+}
+
+.fin-table td.col-label {
+    text-align: left;
+    font-weight: 500;
+    color: #1D1D1F;
+}
+
+.fin-table td.col-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.fin-table td.col-center {
+    text-align: center;
+}
+
+.fin-table td.col-dim {
+    color: #8E8E93;
+}
+
+/* Row Hover */
+.fin-table tr:hover td {
+    background: #F9FAFB;
+}
+
+/* Row Hierarchies */
+.fin-table tr.row-major td {
+    font-weight: 650;
+    color: #1D1D1F;
+    background: #FAFAFC;
+    border-bottom: 1.5px solid #E5E5EA;
+}
+
+.fin-table tr.row-subtotal td {
+    font-weight: 700;
+    color: #1D1D1F;
+    background: #F5F5F7;
+    border-top: 1px solid #D1D1D6;
+    border-bottom: 1.5px solid #D1D1D6;
+}
+
+.fin-table tr.row-final td {
+    font-weight: 750;
+    font-size: 13px;
+    color: #087F69;
+    background: #E6F4F1;
+    border-top: 1.5px solid #087F69;
+    border-bottom: 2px solid #087F69;
+}
+
+.fin-table tr.row-category td {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #087F69;
+    background: #F8FAFC;
+    padding: 8px 12px 6px;
+    border-bottom: 1px solid #E5E5EA;
+}
+
+/* Badges inside tables */
+.fin-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+.fin-badge-pass { background: #E6F4F1; color: #087F69; border: 1px solid #B7E1D7; }
+.fin-badge-warn { background: #FEF3C7; color: #B45309; border: 1px solid #FDE68A; }
+.fin-badge-fail { background: #FEE2E2; color: #B91C1C; border: 1px solid #FECACA; }
+.fin-badge-info { background: #F2F2F7; color: #6E6E73; border: 1px solid #E5E5EA; }
+
+/* Streamlit Native DataFrame & DataEditor container polish */
+div[data-testid="stDataFrame"],
+div[data-testid="stDataEditor"] {
+    border: 1px solid #E5E5EA !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+    background: #FFFFFF !important;
+}
+
+/* Universal Tabs Styling across the entire app */
+div[data-testid="stTabs"] > div[data-baseweb="tab-list"] {
+    background-color: #EFEFF4 !important;
+    padding: 3px !important;
+    border-radius: 10px !important;
+    border: 1px solid #E5E5EA !important;
+    gap: 3px !important;
+}
+div[data-testid="stTabs"] [data-baseweb="tab-border"],
+div[data-testid="stTabs"] [data-baseweb="tab-highlight"] {
+    display: none !important;
+}
+div[data-testid="stTabs"] button[data-baseweb="tab"] {
+    border-radius: 8px !important;
+    padding: 6px 14px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    color: #6E6E73 !important;
+    background: transparent !important;
+    border: none !important;
+    transition: all 0.15s ease !important;
+}
+div[data-testid="stTabs"] button[data-baseweb="tab"]:hover {
+    color: #1D1D1F !important;
+    background: rgba(255, 255, 255, 0.5) !important;
+}
+div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] {
+    background-color: #FFFFFF !important;
+    color: #1D1D1F !important;
+    font-weight: 650 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+    border-bottom: 2px solid #087F69 !important;
+}
+div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] p {
+    color: #1D1D1F !important;
+    font-weight: 650 !important;
+}
+div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="false"] p {
+    color: #6E6E73 !important;
+    font-weight: 500 !important;
+}
 </style>""", unsafe_allow_html=True)
 
 
@@ -1463,15 +1704,88 @@ with data_tab:
     cf_keys = [k for k in ("ebit", "ebitda", "cfo", "capex", "minority_interest", "nonoperating_assets") if k in historical.index]
 
     with hist_view_tabs[0]:
-        st.dataframe(historical.loc[[k for k in BASE_FIELDS if k in historical.index]].rename(index=BASE_FIELDS).style.format("{:,.2f}", na_rep="Missing"), width="stretch")
+        df_all = historical.loc[[k for k in BASE_FIELDS if k in historical.index]].rename(index=BASE_FIELDS)
+        cat_map = {
+            BASE_FIELDS.get("revenue", "Revenue"): "1. Income Statement Line Items",
+            BASE_FIELDS.get("cash", "Cash and cash equivalents"): "2. Balance Sheet Assets",
+            BASE_FIELDS.get("ap", "Trade accounts payable"): "3. Balance Sheet Liabilities & Equity",
+        }
+        hl_rows = [
+            BASE_FIELDS.get("revenue", "Revenue"),
+            BASE_FIELDS.get("net_income", "Net income"),
+            BASE_FIELDS.get("ppe", "Net property, plant and equipment"),
+            BASE_FIELDS.get("equity", "Total common equity"),
+        ]
+        sub_rows = [BASE_FIELDS.get("net_income", "Net income"), BASE_FIELDS.get("equity", "Total common equity")]
+        st.markdown(
+            render_apple_table(
+                df_all,
+                title=f"{clean_company_name(c.get('name', 'Company'))} · Consolidated Historical Accounts",
+                unit_label=f"Unit: IDR billion · Audited through FY{period}",
+                is_transposed_periods=True,
+                highlight_rows=hl_rows,
+                subtotal_rows=sub_rows,
+                category_rows=cat_map,
+            ),
+            unsafe_allow_html=True,
+        )
     with hist_view_tabs[1]:
-        st.dataframe(historical.loc[inc_keys].rename(index=BASE_FIELDS).style.format("{:,.2f}", na_rep="Missing"), width="stretch")
+        df_inc = historical.loc[inc_keys].rename(index=BASE_FIELDS)
+        st.markdown(
+            render_apple_table(
+                df_inc,
+                title=f"{clean_company_name(c.get('name', 'Company'))} · Historical Income Statement",
+                unit_label=f"Unit: IDR billion · Audited through FY{period}",
+                is_transposed_periods=True,
+                highlight_rows=[BASE_FIELDS.get("revenue", "Revenue"), BASE_FIELDS.get("net_income", "Net income")],
+                subtotal_rows=[BASE_FIELDS.get("net_income", "Net income")],
+            ),
+            unsafe_allow_html=True,
+        )
     with hist_view_tabs[2]:
-        st.dataframe(historical.loc[bs_keys].rename(index=BASE_FIELDS).style.format("{:,.2f}", na_rep="Missing"), width="stretch")
+        df_bs = historical.loc[bs_keys].rename(index=BASE_FIELDS)
+        cat_map_bs = {
+            BASE_FIELDS.get("cash", "Cash and cash equivalents"): "Assets",
+            BASE_FIELDS.get("ap", "Trade accounts payable"): "Liabilities & Equity",
+        }
+        st.markdown(
+            render_apple_table(
+                df_bs,
+                title=f"{clean_company_name(c.get('name', 'Company'))} · Historical Balance Sheet",
+                unit_label=f"Unit: IDR billion · Audited through FY{period}",
+                is_transposed_periods=True,
+                highlight_rows=[
+                    BASE_FIELDS.get("cash", "Cash and cash equivalents"),
+                    BASE_FIELDS.get("ppe", "Net property, plant and equipment"),
+                    BASE_FIELDS.get("equity", "Total common equity"),
+                ],
+                subtotal_rows=[BASE_FIELDS.get("equity", "Total common equity")],
+                category_rows=cat_map_bs,
+            ),
+            unsafe_allow_html=True,
+        )
     with hist_view_tabs[3]:
         if cf_keys:
-            cf_labels = BASE_FIELDS | {"ebit": "EBIT", "ebitda": "EBITDA", "cfo": "Operating cash flow", "capex": "Capital expenditure", "minority_interest": "Minority interest", "nonoperating_assets": "Non-operating assets"}
-            st.dataframe(historical.loc[cf_keys].rename(index=cf_labels).style.format("{:,.2f}", na_rep="Missing"), width="stretch")
+            cf_labels = BASE_FIELDS | {
+                "ebit": "EBIT",
+                "ebitda": "EBITDA",
+                "cfo": "Operating cash flow",
+                "capex": "Capital expenditure",
+                "minority_interest": "Minority interest",
+                "nonoperating_assets": "Non-operating assets",
+            }
+            df_cf = historical.loc[cf_keys].rename(index=cf_labels)
+            st.markdown(
+                render_apple_table(
+                    df_cf,
+                    title=f"{clean_company_name(c.get('name', 'Company'))} · Cash Flow & Capital Profile",
+                    unit_label=f"Unit: IDR billion · Audited through FY{period}",
+                    is_transposed_periods=True,
+                    highlight_rows=["EBITDA", "Operating cash flow", "Capital expenditure"],
+                    subtotal_rows=["Operating cash flow"],
+                ),
+                unsafe_allow_html=True,
+            )
         else:
             st.caption("Supplemental cash-flow rows are available in the raw statement expanders below.")
 
@@ -2987,7 +3301,28 @@ with peers_tab:
                 "Similarity & Confidence": f"{score_val}/100 ({conf_val} Confidence)",
             })
 
-        st.dataframe(pd.DataFrame(table_rows), hide_index=True, width="stretch")
+        st.markdown(
+            render_apple_table(
+                pd.DataFrame(table_rows),
+                title="Comparable Peers Screening & Financial Comparability",
+                unit_label=f"Target: {c.get('symbol', 'Target')} · Benchmark Distance Ranking",
+                hide_index=True,
+                highlight_rows=[c["symbol"]],
+                col_alignments={
+                    "Active": "col-center",
+                    "Ticker": "col-center",
+                    "Company Name": "col-text",
+                    "Sub-Industry": "col-text",
+                    "EBITDA Margin": "col-num",
+                    "DER (D/E)": "col-num",
+                    "Similarity & Confidence": "col-num",
+                },
+                badge_cols={
+                    "Active": {"TARGET": "pass", "INCLUDED": "pass", "EXCLUDED": "info"},
+                },
+            ),
+            unsafe_allow_html=True,
+        )
         st.caption("Similarity score (0–100) measures financial comparability based on EBITDA margin and DER leverage alignment relative to target. Confidence tiers: ≥75 High Confidence (strong match), 50–74 Moderate Confidence, <50 Low Confidence.")
 
         with st.expander("Why Selected? · Peer Selection & Similarity Rationale", expanded=False):
@@ -3049,31 +3384,28 @@ with peers_tab:
 
         st.markdown(f"**Multiples Benchmark & Implied Value ({sel_agg})**")
         if not filtered_relative.empty:
-            table_col_config = {
-                "Eligible peers": st.column_config.TextColumn(
-                    label="Eligible peers",
-                    help="Tickers of comparable peers meeting positive metric criteria for this multiple."
+            st.markdown(
+                render_apple_table(
+                    filtered_relative,
+                    title=f"Multiples Benchmark & Implied Value ({sel_agg})",
+                    unit_label="Relative Valuation Matrix · Comparable Multiples",
+                    hide_index=True,
+                    col_formats={
+                        "Peer multiple": "{:,.2f}x",
+                        weight_col_name: "{:.1f}%",
+                        "Implied price (IDR)": "Rp {:,.0f}",
+                    },
+                    col_alignments={
+                        "Multiple": "col-text",
+                        "Case": "col-center",
+                        "Eligible peers": "col-text",
+                        "Peer multiple": "col-num",
+                        weight_col_name: "col-num",
+                        "Implied price (IDR)": "col-num",
+                    },
+                    highlight_rows=["EV / EBITDA", "P / E"],
                 ),
-                "Peer multiple": st.column_config.NumberColumn(format="%.2fx"),
-                "Implied price (IDR)": st.column_config.NumberColumn(format="%,.0f")
-            }
-            if any_discarded:
-                table_col_config[weight_col_name] = st.column_config.NumberColumn(
-                    label="Normalized weight",
-                    help="Normalized effective weight after discarding ineligible multiples (< 2 valid peers or non-positive value). Re-weights eligible multiples so their sum equals exactly 100.0%.",
-                    format="%.1f%%"
-                )
-            else:
-                table_col_config[weight_col_name] = st.column_config.NumberColumn(
-                    label="Weight",
-                    format="%.1f%%"
-                )
-
-            st.dataframe(
-                filtered_relative,
-                hide_index=True,
-                width="stretch",
-                column_config=table_col_config
+                unsafe_allow_html=True,
             )
         else:
             st.info("No multiples meet the eligibility requirement (minimum 2 valid peers required). DCF approach has 100% weighting.")
@@ -3191,7 +3523,26 @@ with analyst_review_tab:
             "Economic Rationale": "Triangulates intrinsic cash-flow value with observable market peer pricing.",
         },
     ]
-    st.dataframe(pd.DataFrame(assump_audit_rows), hide_index=True, width="stretch")
+    st.markdown(
+        render_apple_table(
+            pd.DataFrame(assump_audit_rows),
+            title="Comprehensive Valuation Assumptions Audit & Provenance Log",
+            unit_label="Economic Drivers & Method Calibration",
+            hide_index=True,
+            col_alignments={
+                "Category": "col-text",
+                "Parameter": "col-text",
+                "Effective Value": "col-num",
+                "Inferred Default": "col-num",
+                "Provenance": "col-center",
+                "Economic Rationale": "col-text",
+            },
+            badge_cols={
+                "Provenance": {"User Override": "warn", "Model Inferred": "info", "Policy Default": "info"},
+            },
+        ),
+        unsafe_allow_html=True,
+    )
 
     # ── PANEL B: KEY RISKS ──
     st.markdown('<div class="ios-sub-header">Panel B · Categorized Investment & Valuation Risks</div>', unsafe_allow_html=True)
@@ -3252,7 +3603,25 @@ with analyst_review_tab:
 
     # ── PANEL D: MODEL VALIDATION ──
     st.markdown('<div class="ios-sub-header">Panel D · Executed Model Validation & Integrity Checks</div>', unsafe_allow_html=True)
-    st.dataframe(pd.DataFrame(validation_checks), hide_index=True, width="stretch")
+    st.markdown(
+        render_apple_table(
+            pd.DataFrame(validation_checks),
+            title="Automated Model Integrity & Validation Checks",
+            unit_label="Rigorous Pre-Flight Audit",
+            hide_index=True,
+            col_alignments={
+                "Check ID": "col-center",
+                "Validation Rule": "col-text",
+                "Status": "col-center",
+                "Measured Value": "col-num",
+                "Threshold / Standard": "col-text",
+            },
+            badge_cols={
+                "Status": {"PASS": "pass", "FAIL": "fail", "WARNING": "warn", "NOT VERIFIED": "info"},
+            },
+        ),
+        unsafe_allow_html=True,
+    )
 
 with dcf_tab:
     st.subheader("DCF & Relative Valuation")
@@ -3546,9 +3915,26 @@ with dcf_tab:
                 "fcff": "Free cash flow to firm", "reinvestment": "Total Reinvestment (Net CapEx + ΔNWC)",
                 "invested_capital": "Operating Invested Capital", "roic": "Return on Invested Capital (ROIC)"
             }
-            for title, rows in [("Income statement", income_rows), ("Balance sheet", bs_rows), ("Cash flow & funding", cf_rows)]:
-                st.markdown(f"##### {title}")
-                st.dataframe(f[rows].T.rename(index=labels).style.format("{:,.1f}"), width="stretch")
+            hl_set = [
+                "Reported revenue", "EBITDA", "EBIT", "NOPAT (After-tax operating profit)",
+                "Net income", "Total assets", "Total liabilities", "Operating cash flow",
+                "Capital expenditure (outflow)", "Free cash flow to firm", "Return on Invested Capital (ROIC)"
+            ]
+            sub_set = ["Net income", "Total assets", "Total liabilities", "Total common equity", "Free cash flow to firm"]
+            for title, rows in [("Income Statement", income_rows), ("Balance Sheet", bs_rows), ("Cash Flow & Funding", cf_rows)]:
+                df_fc = f[rows].T.rename(index=labels)
+                st.markdown(
+                    render_apple_table(
+                        df_fc,
+                        title=f"5-Year Forecast · {title}",
+                        unit_label="Unit: IDR billion · 5-Year Explicit Horizon",
+                        is_transposed_periods=True,
+                        highlight_rows=hl_set,
+                        subtotal_rows=sub_set,
+                        default_format="{:,.1f}",
+                    ),
+                    unsafe_allow_html=True,
+                )
                 if title == "Balance sheet":
                     st.caption(
                         "**Liabilities Decomposition**: Financial debt (Short-term & Long-term debt) is maintained under a constant rollover "
@@ -3694,7 +4080,25 @@ with scenario_tab:
         if "Terminal ROIC" in scen_df.columns:
             format_dict["Terminal ROIC"] = "{:.2%}"
 
-        st.dataframe(scen_df.style.format(format_dict, na_rep="—"), width="stretch")
+        st.markdown(
+            render_apple_table(
+                scen_df,
+                title="Scenario Valuation Matrix & Operating Case Trajectory",
+                unit_label="Unit: IDR / Share · Expected Value Synthesis",
+                final_rows=["Expected"],
+                highlight_rows=["Base", "Expected"],
+                col_formats={
+                    "Probability": "{:.1%}",
+                    "Value / share": "Rp {:,.2f}",
+                    "Year 5 revenue": "IDR {:,.1f} bn",
+                    "Year 5 EBIT": "IDR {:,.1f} bn",
+                    "WACC": "{:.2%}",
+                    "Terminal growth": "{:.2%}",
+                    "Terminal ROIC": "{:.2%}",
+                },
+            ),
+            unsafe_allow_html=True,
+        )
 
         st.button("Edit scenario drivers", key="btn_edit_scenario_drivers")
         components.html(
@@ -3897,7 +4301,24 @@ with report_tab:
             "Methodology & Basis": f"Recommendation: {rec_rating} (BUY > +15%, HOLD ±15%, SELL < −15%)",
         },
     ]
-    st.dataframe(pd.DataFrame(val_summary_rows), hide_index=True, width="stretch")
+    st.markdown(
+        render_apple_table(
+            pd.DataFrame(val_summary_rows),
+            title="Valuation Architecture Summary & Blended Fair Value",
+            unit_label="Target Fair Value Synthesis",
+            hide_index=True,
+            final_rows=["Blended Fair Value Target"],
+            highlight_rows=["DCF Intrinsic Fair Value (FCFF)", "Blended Fair Value Target"],
+            col_alignments={
+                "Valuation Pillar": "col-text",
+                "Implied Value / Share": "col-num",
+                "Vs. Market Price": "col-num",
+                "Effective Weight": "col-num",
+                "Methodology & Basis": "col-text",
+            },
+        ),
+        unsafe_allow_html=True,
+    )
 
     # ── 3. METHOD SELECTION RATIONALE ──
     st.markdown('<div class="ios-sub-header">3. Method Selection & Peer Comparability Rationale</div>', unsafe_allow_html=True)
@@ -3914,7 +4335,26 @@ with report_tab:
 
     # ── 4. KEY ASSUMPTIONS ──
     st.markdown('<div class="ios-sub-header">4. Key Valuation Assumptions & Provenance</div>', unsafe_allow_html=True)
-    st.dataframe(pd.DataFrame(assump_audit_rows), hide_index=True, width="stretch")
+    st.markdown(
+        render_apple_table(
+            pd.DataFrame(assump_audit_rows),
+            title="Comprehensive Valuation Assumptions Audit & Provenance Log",
+            unit_label="Economic Drivers & Method Calibration",
+            hide_index=True,
+            col_alignments={
+                "Category": "col-text",
+                "Parameter": "col-text",
+                "Effective Value": "col-num",
+                "Inferred Default": "col-num",
+                "Provenance": "col-center",
+                "Economic Rationale": "col-text",
+            },
+            badge_cols={
+                "Provenance": {"User Override": "warn", "Model Inferred": "info", "Policy Default": "info"},
+            },
+        ),
+        unsafe_allow_html=True,
+    )
 
     # ── 5. KEY RISKS & MODEL LIMITATIONS ──
     st.markdown('<div class="ios-sub-header">5. Key Investment Risks & Structural Model Limitations</div>', unsafe_allow_html=True)
@@ -3950,7 +4390,25 @@ with report_tab:
 
     # ── 6. VALIDATION & INTEGRITY AUDIT ──
     st.markdown('<div class="ios-sub-header">6. Model Validation & Integrity Summary</div>', unsafe_allow_html=True)
-    st.dataframe(pd.DataFrame(validation_checks), hide_index=True, width="stretch")
+    st.markdown(
+        render_apple_table(
+            pd.DataFrame(validation_checks),
+            title="Automated Model Integrity & Validation Checks",
+            unit_label="Rigorous Pre-Flight Audit",
+            hide_index=True,
+            col_alignments={
+                "Check ID": "col-center",
+                "Validation Rule": "col-text",
+                "Status": "col-center",
+                "Measured Value": "col-num",
+                "Threshold / Standard": "col-text",
+            },
+            badge_cols={
+                "Status": {"PASS": "pass", "FAIL": "fail", "WARNING": "warn", "NOT VERIFIED": "info"},
+            },
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 with st.sidebar:
