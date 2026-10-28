@@ -670,6 +670,286 @@ button { border-radius: 10px !important; }
 .p-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; line-height: 1.4; color: #6E6E73; height: 22px; }
 .p-row b { color: #1D1D1F; font-weight: 600; font-variant-numeric: tabular-nums; }
 .pillar-footer { font-size: 11px; color: #6E6E73; border-top: 1px dashed #E5E5EA; padding-top: 8px; margin-top: auto; }
+
+/* --- DCF & Relative Valuation Tab: Symmetrical KPI Grid, Equity Bridge & Terminal Economics --- */
+.dcf-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin: 8px 0 20px;
+}
+.dcf-kpi-card {
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
+    border-radius: 14px;
+    padding: 16px 18px;
+    min-height: 112px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-sizing: border-box;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.dcf-kpi-card:hover {
+    border-color: #087F69;
+    box-shadow: 0 3px 10px rgba(8, 127, 105, 0.06);
+}
+.dcf-kpi-card-highlight {
+    border-top: 3px solid #087F69;
+}
+.dcf-kpi-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #6E6E73;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.3;
+    min-height: 18px;
+    margin-bottom: 6px;
+}
+.dcf-kpi-value {
+    font-size: clamp(1.22rem, 1.45vw, 1.52rem);
+    font-weight: 700;
+    color: #1D1D1F;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 8px;
+    white-space: nowrap;
+}
+.dcf-kpi-value-accent {
+    color: #087F69;
+}
+.dcf-kpi-sub {
+    font-size: 12px;
+    font-weight: 500;
+    color: #6E6E73;
+    line-height: 1.35;
+    font-variant-numeric: tabular-nums;
+    margin-top: auto;
+    border-top: 1px solid #F2F2F7;
+    padding-top: 6px;
+}
+@media (max-width: 1100px) {
+    .dcf-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 640px) {
+    .dcf-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Unified Section Heading for 50:50 Bridge & Terminal Cards */
+.dcf-panel-heading {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1D1D1F;
+    letter-spacing: -0.015em;
+    margin: 0 0 10px 0;
+    min-height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.dcf-panel-unit {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #6E6E73;
+}
+.dcf-panel-card {
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-sizing: border-box;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+    margin-bottom: 14px;
+}
+
+/* Enterprise-to-Equity Valuation Schedule Table */
+.fin-schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    color: #1D1D1F;
+    font-variant-numeric: tabular-nums;
+}
+.fin-schedule-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6E6E73;
+    padding: 6px 8px 8px;
+    border-bottom: 1.5px solid #E5E5EA;
+}
+.fin-schedule-table th.num,
+.fin-schedule-table td.num {
+    text-align: right;
+    white-space: nowrap;
+}
+.fin-schedule-table tr.sec-group td {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #087F69;
+    background: #F8FAFC;
+    padding: 8px 8px 5px;
+    border-bottom: 1px solid #E5E5EA;
+}
+.fin-schedule-table tr.item-row td {
+    padding: 7px 8px;
+    border-bottom: 1px solid #F2F2F7;
+    color: #1D1D1F;
+}
+.fin-schedule-table tr.subtotal-row td {
+    padding: 9px 8px;
+    font-weight: 700;
+    color: #1D1D1F;
+    background: #F5F5F7;
+    border-top: 1px solid #D1D1D6;
+    border-bottom: 1.5px solid #D1D1D6;
+}
+.fin-schedule-table tr.final-row td {
+    padding: 10px 8px;
+    font-weight: 750;
+    font-size: 13.5px;
+    color: #087F69;
+    background: #E6F4F1;
+    border-top: 1.5px solid #087F69;
+    border-bottom: 2px solid #087F69;
+}
+
+/* Terminal Economics Structured Financial Card */
+.term-sub-header {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #087F69;
+    background: #F8FAFC;
+    padding: 7px 8px 5px;
+    border-bottom: 1px solid #E5E5EA;
+    margin-top: 8px;
+}
+.term-sub-header:first-child {
+    margin-top: 0;
+}
+.term-kv-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6.5px 8px;
+    border-bottom: 1px solid #F2F2F7;
+    font-size: 13px;
+    color: #1D1D1F;
+}
+.term-kv-row .t-label {
+    color: #1D1D1F;
+    font-weight: 450;
+}
+.term-kv-row .t-val {
+    font-weight: 600;
+    color: #1D1D1F;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+.term-kv-row.term-highlight {
+    background: #F5F5F7;
+    font-weight: 700;
+    border-top: 1px solid #D1D1D6;
+    border-bottom: 1.5px solid #D1D1D6;
+}
+.term-kv-row.term-highlight .t-label,
+.term-kv-row.term-highlight .t-val {
+    font-weight: 700;
+    color: #1D1D1F;
+}
+.term-prop-wrap {
+    padding: 8px 8px 6px;
+    border-bottom: 1px solid #F2F2F7;
+}
+.term-prop-bar-bg {
+    width: 100%;
+    height: 8px;
+    background: #E5E5EA;
+    border-radius: 999px;
+    overflow: hidden;
+    display: flex;
+    margin: 6px 0 5px;
+}
+.term-prop-bar-fcff {
+    background: #94A3B8;
+    height: 100%;
+}
+.term-prop-bar-tv {
+    background: #087F69;
+    height: 100%;
+}
+.term-prop-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11.5px;
+    color: #6E6E73;
+    font-variant-numeric: tabular-nums;
+}
+.term-val-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px 4px 2px;
+}
+.term-val-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #F8FAFC;
+    border: 1px solid #E5E5EA;
+    border-radius: 8px;
+    padding: 5px 8px;
+    font-size: 11.5px;
+    color: #1D1D1F;
+}
+.term-badge-pass {
+    font-size: 10px;
+    font-weight: 700;
+    color: #087F69;
+    background: #E6F4F1;
+    border: 1px solid #B7E1D7;
+    padding: 1px 6px;
+    border-radius: 999px;
+}
+.term-badge-warn {
+    font-size: 10px;
+    font-weight: 700;
+    color: #B45309;
+    background: #FEF3C7;
+    border: 1px solid #FDE68A;
+    padding: 1px 6px;
+    border-radius: 999px;
+}
+.term-badge-fail {
+    font-size: 10px;
+    font-weight: 700;
+    color: #B91C1C;
+    background: #FEE2E2;
+    border: 1px solid #FECACA;
+    padding: 1px 6px;
+    border-radius: 999px;
+}
+.dcf-footnote {
+    font-size: 11.5px;
+    color: #6E6E73;
+    line-height: 1.45;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #E5E5EA;
+}
 </style>""", unsafe_allow_html=True)
 
 
@@ -2733,57 +3013,275 @@ with analyst_review_tab:
 with dcf_tab:
     st.subheader("DCF & Relative Valuation")
     st.caption(
-        "Executive summary of intrinsic cash-flow valuation and enterprise-to-equity bridge first, "
-        "followed by expandable 5-year connected financial statements and mathematical proofs."
+        "Executive summary of intrinsic cash-flow valuation, enterprise-to-equity valuation schedule, "
+        "and terminal perpetuity discipline, followed by expandable 5-year connected financial statements and mathematical proofs."
     )
     if result:
-        # ── EXECUTIVE SUMMARY STRIP ──
-        dcf_k1, dcf_k2, dcf_k3, dcf_k4 = st.columns(4)
-        dcf_k1.metric("DCF Fair Value / Share", f"Rp {dcf_p:,.0f}" if dcf_p else "N/A", f"Expected: Rp {expected_dcf_price:,.0f}" if expected_dcf_price else "Base DCF")
-        dcf_k2.metric("Enterprise Value (EV)", f"IDR {result['enterprise_value']:,.1f} bn", f"PV FCFF: IDR {result['pv_flows']:,.1f} bn")
-        dcf_k3.metric("Implied Equity Value", f"IDR {result['equity_value']:,.1f} bn", f"TV Share: {result['terminal_share']:.1%} of EV")
-        dcf_k4.metric("Relative Value / Share", f"Rp {rel_price:,.0f}" if pd.notna(rel_price) else "N/A", f"{len(peer_rows)} active peers ({rel_agg_choice})")
+        # ── 1. SYMMETRICAL 4-COLUMN KPI SUMMARY STRIP ──
+        dcf_fair_val_str = f"Rp {result['price']:,.0f}" if pd.notna(result.get("price")) else "N/A"
+        dcf_sub_str = (
+            f"Expected (Scenario-Weighted): Rp {expected_dcf_price:,.0f}"
+            if (expected_dcf_price is not None and pd.notna(expected_dcf_price))
+            else f"Base DCF · Weight: {eff_w_dcf:.0%}"
+        )
+        ev_val_str = f"IDR {result['enterprise_value']:,.1f} bn"
+        ev_sub_str = f"PV of explicit FCFF: IDR {result['pv_flows']:,.1f} bn"
+        eq_val_str = f"IDR {result['equity_value']:,.1f} bn"
+        eq_sub_str = f"Terminal Value share: {result['terminal_share']:.1%} of EV"
+        rel_val_str = f"Rp {rel_price:,.0f}" if pd.notna(rel_price) else "N/A"
+        rel_sub_str = f"{len(peer_rows)} active peers ({rel_agg_choice} · {eff_w_rel:.0%} weight)"
 
-        col1, col2 = st.columns([1.15, 1], gap="medium")
+        st.markdown(
+            f"""
+            <div class="dcf-kpi-grid">
+                <div class="dcf-kpi-card dcf-kpi-card-highlight">
+                    <div class="dcf-kpi-label">DCF Fair Value / Share</div>
+                    <div class="dcf-kpi-value dcf-kpi-value-accent">{dcf_fair_val_str}</div>
+                    <div class="dcf-kpi-sub">{dcf_sub_str}</div>
+                </div>
+                <div class="dcf-kpi-card">
+                    <div class="dcf-kpi-label">Enterprise Value (EV)</div>
+                    <div class="dcf-kpi-value">{ev_val_str}</div>
+                    <div class="dcf-kpi-sub">{ev_sub_str}</div>
+                </div>
+                <div class="dcf-kpi-card">
+                    <div class="dcf-kpi-label">Implied Equity Value</div>
+                    <div class="dcf-kpi-value">{eq_val_str}</div>
+                    <div class="dcf-kpi-sub">{eq_sub_str}</div>
+                </div>
+                <div class="dcf-kpi-card">
+                    <div class="dcf-kpi-label">Relative Value / Share</div>
+                    <div class="dcf-kpi-value">{rel_val_str}</div>
+                    <div class="dcf-kpi-sub">{rel_sub_str}</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # ── 2 & 3. 50:50 SYMMETRICAL LAYOUT: EQUITY BRIDGE vs. TERMINAL ECONOMICS ──
+        col1, col2 = st.columns([1, 1], gap="medium")
+
         with col1:
-            st.markdown("#### Enterprise-to-Equity Value Bridge")
-            bridge = pd.DataFrame({
-                "Component": [
-                    "PV of 5-year FCFF (Explicit Forecast)",
-                    "PV of Terminal Value (Perpetuity)",
-                    "Enterprise Value (EV)",
-                    "Add: Opening Cash & Marketable Securities",
-                    "Add: Non-Operating Assets",
-                    "Less: Opening Total Financial Debt (ST + LT)",
-                    "Less: Minority Interest & Other Claims",
-                    "Implied Intrinsic Equity Value",
-                ],
-                "IDR bn": [
-                    result["pv_flows"], result["pv_terminal"], result["enterprise_value"], b["cash"],
-                    a.nonoperating_assets, -b["short_debt"] - b["long_debt"], -a.other_claims, result["equity_value"]
-                ]
-            })
-            st.dataframe(bridge, hide_index=True, width="stretch", column_config={"IDR bn": st.column_config.NumberColumn(format="%,.1f")})
-        with col2:
-            st.markdown("#### Terminal Economics & Perpetuity Discipline")
-            reinv_rate = result.get("terminal_reinvestment_rate", a.terminal_growth / a.terminal_roic)
+            st.markdown(
+                '<div class="dcf-panel-heading">'
+                '<span>Enterprise-to-Equity Value Bridge</span>'
+                '<span class="dcf-panel-unit">Unit: IDR billion (except per share)</span>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            pv_flows_v = float(result["pv_flows"])
+            pv_term_v = float(result["pv_terminal"])
+            ev_v = float(result["enterprise_value"])
+            cash_v = float(b["cash"])
+            nonop_v = float(a.nonoperating_assets)
+            debt_v = -float(b["short_debt"] + b["long_debt"])
+            claims_v = -float(a.other_claims)
+            eq_v = float(result["equity_value"])
+            dcf_ps_v = float(result["price"])
+
+            pv_flows_pct = (pv_flows_v / ev_v * 100.0) if ev_v else 0.0
+            pv_term_pct = (pv_term_v / ev_v * 100.0) if ev_v else 0.0
+
+            def _fmt_sched_amt(val, signed=False):
+                if val < 0:
+                    return f"({abs(val):,.1f})"
+                if signed and val > 0:
+                    return f"+{val:,.1f}"
+                return f"{val:,.1f}"
+
             st.markdown(
                 f"""
-                <div class="ios-card" style="padding:16px;">
-                    <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#087F69; margin-bottom:8px;">Damodaran Value-Driver Perpetuity (Year 6+)</div>
-                    <div style="font-size:0.86rem; color:#1D1D1F; line-height:1.7;">
-                        <div>• <b>Explicit Forecast Horizon</b>: 5 Years (FY+1 to FY+5)</div>
-                        <div>• <b>Terminal Growth Rate ($g$)</b>: <b>{a.terminal_growth:.2%}</b></div>
-                        <div>• <b>Terminal Return on Invested Capital ($\\text{{ROIC}}_n$)</b>: <b>{a.terminal_roic:.2%}</b></div>
-                        <div>• <b>Implied Terminal Reinvestment Rate ($g / \\text{{ROIC}}_n$)</b>: <b>{reinv_rate:.1%}</b></div>
-                        <div>• <b>Discount Rate ($\\text{{WACC}}$)</b>: <b>{a.wacc:.2%}</b></div>
-                        <div>• <b>PV of Terminal Value Share of EV</b>: <b>{result['terminal_share']:.1%}</b></div>
+                <div class="dcf-panel-card">
+                    <table class="fin-schedule-table">
+                        <thead>
+                            <tr>
+                                <th>Valuation Component</th>
+                                <th class="num">Basis / Share</th>
+                                <th class="num">Amount (IDR bn)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="sec-group"><td colspan="3">A. Enterprise Valuation</td></tr>
+                            <tr class="item-row">
+                                <td>PV of Explicit Forecast FCFF (Years 1–5)</td>
+                                <td class="num" style="color:#6E6E73;">{pv_flows_pct:.1f}% of EV</td>
+                                <td class="num">{_fmt_sched_amt(pv_flows_v)}</td>
+                            </tr>
+                            <tr class="item-row">
+                                <td>PV of Terminal Value (Year 6+ Perpetuity)</td>
+                                <td class="num" style="color:#6E6E73;">{pv_term_pct:.1f}% of EV</td>
+                                <td class="num">{_fmt_sched_amt(pv_term_v)}</td>
+                            </tr>
+                            <tr class="subtotal-row">
+                                <td>Enterprise Value (EV)</td>
+                                <td class="num">100.0% of EV</td>
+                                <td class="num">{_fmt_sched_amt(ev_v)}</td>
+                            </tr>
+                            <tr class="sec-group"><td colspan="3">B. Enterprise-to-Equity Adjustments</td></tr>
+                            <tr class="item-row">
+                                <td>Add: Opening Cash &amp; Marketable Securities</td>
+                                <td class="num" style="color:#6E6E73;">+Rp {(cash_v / shares):,.0f}/sh</td>
+                                <td class="num">{_fmt_sched_amt(cash_v, signed=True)}</td>
+                            </tr>
+                            <tr class="item-row">
+                                <td>Add: Non-Operating Assets</td>
+                                <td class="num" style="color:#6E6E73;">+Rp {(nonop_v / shares):,.0f}/sh</td>
+                                <td class="num">{_fmt_sched_amt(nonop_v, signed=True)}</td>
+                            </tr>
+                            <tr class="item-row">
+                                <td>Less: Opening Total Financial Debt (ST + LT)</td>
+                                <td class="num" style="color:#6E6E73;">−Rp {(abs(debt_v) / shares):,.0f}/sh</td>
+                                <td class="num">{_fmt_sched_amt(debt_v)}</td>
+                            </tr>
+                            <tr class="item-row">
+                                <td>Less: Minority Interest &amp; Other Claims</td>
+                                <td class="num" style="color:#6E6E73;">−Rp {(abs(claims_v) / shares):,.0f}/sh</td>
+                                <td class="num">{_fmt_sched_amt(claims_v)}</td>
+                            </tr>
+                            <tr class="sec-group"><td colspan="3">C. Final Equity Valuation</td></tr>
+                            <tr class="subtotal-row">
+                                <td>Implied Intrinsic Equity Value</td>
+                                <td class="num">Common Equity</td>
+                                <td class="num">{_fmt_sched_amt(eq_v)}</td>
+                            </tr>
+                            <tr class="item-row">
+                                <td>Diluted Shares Outstanding</td>
+                                <td class="num" style="color:#6E6E73;">Billion shares</td>
+                                <td class="num">{shares:,.3f} bn</td>
+                            </tr>
+                            <tr class="final-row">
+                                <td>DCF Fair Value per Share (Base Case)</td>
+                                <td class="num">{f"Expected: Rp {expected_dcf_price:,.0f}" if (expected_dcf_price and pd.notna(expected_dcf_price)) else "Intrinsic Base"}</td>
+                                <td class="num">Rp {dcf_ps_v:,.0f}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="dcf-footnote">
+                        Note: Parentheses indicate negative bridge deductions. Enterprise-to-equity adjustments use audited opening balance sheet balances (FY {period}) to avoid double-counting explicit forecast cash flows.
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.caption("Terminal FCFF = Year 6 NOPAT × (1 − terminal growth / terminal ROIC). Annual cash flows are discounted at year-end. The equity bridge uses opening cash and debt, not Year-5 balances.")
+
+        with col2:
+            st.markdown(
+                '<div class="dcf-panel-heading">'
+                '<span>Terminal Economics &amp; Perpetuity Discipline</span>'
+                '<span class="dcf-panel-unit">Damodaran Value-Driver Model (Year 6+)</span>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            reinv_rate = float(result.get("terminal_reinvestment_rate", a.terminal_growth / a.terminal_roic))
+            term_nopat_v = float(result["terminal_nopat"])
+            term_fcff_v = float(result["terminal_fcff"])
+            term_reinv_amt = term_nopat_v - term_fcff_v
+            term_val_v = float(result["terminal_value"])
+            pv_term_v = float(result["pv_terminal"])
+            tv_share_pct = float(result["terminal_share"]) * 100.0
+            fcff_share_pct = max(0.0, 100.0 - tv_share_pct)
+            exit_mult_v = result.get("implied_exit_ev_ebitda")
+            exit_mult_str = f" (Implied Exit EV/EBITDA: {exit_mult_v:.2f}x)" if (exit_mult_v is not None and pd.notna(exit_mult_v)) else ""
+
+            # Dynamic Model Validation Checks for Terminal Economics
+            chk_wacc_g = a.wacc > a.terminal_growth
+            chk_roic_g = a.terminal_roic > a.terminal_growth
+            chk_reinv_valid = 0.0 <= reinv_rate < 1.0
+            chk_tv_conc = result["terminal_share"] <= 0.75
+
+            b_wacc_cls = "term-badge-pass" if chk_wacc_g else "term-badge-fail"
+            b_wacc_txt = "PASS" if chk_wacc_g else "FAIL"
+            b_roic_cls = "term-badge-pass" if chk_roic_g else "term-badge-warn"
+            b_roic_txt = "PASS" if chk_roic_g else "WARN"
+            b_reinv_cls = "term-badge-pass" if chk_reinv_valid else "term-badge-warn"
+            b_reinv_txt = f"PASS ({reinv_rate:.1%})" if chk_reinv_valid else "WARN"
+            b_conc_cls = "term-badge-pass" if chk_tv_conc else "term-badge-warn"
+            b_conc_txt = "PASS (≤75%)" if chk_tv_conc else "HIGH (>75%)"
+
+            st.markdown(
+                f"""
+                <div class="dcf-panel-card">
+                    <div class="term-sub-header">A. Forecast &amp; Terminal Parameters</div>
+                    <div class="term-kv-row">
+                        <span class="t-label">Explicit Forecast Horizon</span>
+                        <span class="t-val">{len(f)} Years ({first_year}–{first_year + len(f) - 1})</span>
+                    </div>
+                    <div class="term-kv-row">
+                        <span class="t-label">Terminal Growth Rate (g)</span>
+                        <span class="t-val">{a.terminal_growth:.2%}</span>
+                    </div>
+                    <div class="term-kv-row">
+                        <span class="t-label">Terminal Return on Invested Capital (ROIC)</span>
+                        <span class="t-val">{a.terminal_roic:.2%}</span>
+                    </div>
+                    <div class="term-kv-row">
+                        <span class="t-label">Terminal Reinvestment Rate (g / ROIC)</span>
+                        <span class="t-val">{reinv_rate:.1%}</span>
+                    </div>
+                    <div class="term-kv-row">
+                        <span class="t-label">Weighted Average Cost of Capital (WACC)</span>
+                        <span class="t-val">{a.wacc:.2%}</span>
+                    </div>
+                    <div class="term-sub-header">B. Terminal Value Calculation (IDR billion)</div>
+                    <div class="term-kv-row">
+                        <span class="t-label">Terminal Year-6 NOPAT</span>
+                        <span class="t-val">IDR {term_nopat_v:,.1f} bn</span>
+                    </div>
+                    <div class="term-kv-row">
+                        <span class="t-label">Less: Sustainable Terminal Reinvestment</span>
+                        <span class="t-val">(IDR {term_reinv_amt:,.1f} bn)</span>
+                    </div>
+                    <div class="term-kv-row">
+                        <span class="t-label">Terminal Free Cash Flow to Firm (FCFF)</span>
+                        <span class="t-val">IDR {term_fcff_v:,.1f} bn</span>
+                    </div>
+                    <div class="term-kv-row">
+                        <span class="t-label">Undiscounted Terminal Value at Year 5{exit_mult_str}</span>
+                        <span class="t-val">IDR {term_val_v:,.1f} bn</span>
+                    </div>
+                    <div class="term-kv-row term-highlight">
+                        <span class="t-label">Present Value of Terminal Value</span>
+                        <span class="t-val" style="color:#087F69;">IDR {pv_term_v:,.1f} bn</span>
+                    </div>
+                    <div class="term-sub-header">C. Terminal Value Contribution to EV</div>
+                    <div class="term-prop-wrap">
+                        <div style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:600; color:#1D1D1F;">
+                            <span>Terminal Value Contribution</span>
+                            <span style="color:#087F69;">{tv_share_pct:.1f}% of EV</span>
+                        </div>
+                        <div class="term-prop-bar-bg">
+                            <div class="term-prop-bar-fcff" style="width:{fcff_share_pct:.1f}%;"></div>
+                            <div class="term-prop-bar-tv" style="width:{tv_share_pct:.1f}%;"></div>
+                        </div>
+                        <div class="term-prop-legend">
+                            <span>Explicit 5Y FCFF: {fcff_share_pct:.1f}% (IDR {pv_flows_v:,.1f} bn)</span>
+                            <span>Terminal Value: {tv_share_pct:.1f}% (IDR {pv_term_v:,.1f} bn)</span>
+                        </div>
+                    </div>
+                    <div class="term-sub-header">D. Model Validation &amp; Perpetuity Checks</div>
+                    <div class="term-val-grid">
+                        <div class="term-val-item">
+                            <span>WACC &gt; Terminal Growth (g)</span>
+                            <span class="{b_wacc_cls}">{b_wacc_txt}</span>
+                        </div>
+                        <div class="term-val-item">
+                            <span>Terminal ROIC &gt; Terminal g</span>
+                            <span class="{b_roic_cls}">{b_roic_txt}</span>
+                        </div>
+                        <div class="term-val-item">
+                            <span>Valid Reinvestment (g / ROIC)</span>
+                            <span class="{b_reinv_cls}">{b_reinv_txt}</span>
+                        </div>
+                        <div class="term-val-item">
+                            <span>TV Share Bounds (≤75% EV)</span>
+                            <span class="{b_conc_cls}">{b_conc_txt}</span>
+                        </div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
         # ── EXPANDABLE EVIDENCE: 5-YEAR CONNECTED FINANCIAL STATEMENTS ──
         with st.expander("5-Year Connected Financial Statements (Income Statement · Balance Sheet · Cash Flow)", expanded=False):
@@ -3163,7 +3661,7 @@ with report_tab:
         f"""
         <div class="ios-card" style="padding:16px; font-size:0.86rem; color:#1D1D1F; line-height:1.6;">
             <div>• <b>Primary Valuation Architecture</b>: Triangulates <b>FCFF Discounted Cash Flow ({eff_w_dcf:.0%})</b> with <b>Comparable Peer Multiples ({eff_w_rel:.0%})</b> (Peer Group Quality: <b>{approach_eval.get('quality', 'Standard')}</b>). {approach_eval.get('rationale', '')}</div>
-            <div>• <b>Why FCFF DCF</b>: Captures multi-year operating margin transitions ({a.ebit_margin:.1%} in Y1–3 to {a.mature_margin:.1%} in Y5), explicit working-capital and CapEx reinvestment ({a.capex_pct:.1%} of sales), and enforces Damodaran's terminal reinvestment discipline ($g / \\text{{ROIC}}_n$).</div>
+            <div>• <b>Why FCFF DCF</b>: Captures multi-year operating margin transitions ({a.ebit_margin:.1%} in Y1–3 to {a.mature_margin:.1%} in Y5), explicit working-capital and CapEx reinvestment ({a.capex_pct:.1%} of sales), and enforces Damodaran's terminal reinvestment discipline (g / ROIC).</div>
             <div>• <b>Why Comparable Multiples</b>: Anchors intrinsic assumptions against observable IDX market pricing across {len(peer_rows)} active peer(s) ranked by Euclidean distance on EBITDA margin and Debt/Equity (DER).</div>
         </div>
         """,

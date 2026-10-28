@@ -88,3 +88,34 @@ def test_format_wib_retrieval_and_badge_rendering():
     active_co = app.session_state.company
     assert "fetched_at" in active_co
     assert str(active_co["fetched_at"]).startswith("202")
+
+
+def test_dcf_and_relative_valuation_tab_ui_refinements():
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py", default_timeout=30).run()
+    assert not app.exception
+    rendered_markdown = " ".join(x.value for x in app.markdown)
+
+    # 1. Symmetrical 4-card KPI grid
+    assert "dcf-kpi-grid" in rendered_markdown
+    assert "DCF Fair Value / Share" in rendered_markdown
+    assert "Enterprise Value (EV)" in rendered_markdown
+    assert "Implied Equity Value" in rendered_markdown
+    assert "Relative Value / Share" in rendered_markdown
+
+    # 2. Structured Enterprise-to-Equity Value Bridge schedule (A, B, C sections)
+    assert "fin-schedule-table" in rendered_markdown
+    assert "A. Enterprise Valuation" in rendered_markdown
+    assert "B. Enterprise-to-Equity Adjustments" in rendered_markdown
+    assert "C. Final Equity Valuation" in rendered_markdown
+
+    # 3. Structured Terminal Economics & Perpetuity Discipline card (A, B, C, D sections)
+    assert "A. Forecast &amp; Terminal Parameters" in rendered_markdown
+    assert "B. Terminal Value Calculation (IDR billion)" in rendered_markdown
+    assert "C. Terminal Value Contribution to EV" in rendered_markdown
+    assert "D. Model Validation &amp; Perpetuity Checks" in rendered_markdown
+
+    # 4. Verify no broken raw LaTeX strings inside HTML cards
+    assert "($g$)" not in rendered_markdown
+    assert "(\\text{ROIC}" not in rendered_markdown
+    assert "($\\text{ROIC}" not in rendered_markdown
+
