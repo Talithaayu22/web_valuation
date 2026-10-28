@@ -551,6 +551,7 @@ button { border-radius: 10px !important; }
 }
 
 /* --- Three-Column Assumption Input Symmetry & Alignment --- */
+.st-key-assumptions_form_wrap,
 .st-key-assumptions_form_wrap [data-testid="stForm"],
 [data-testid="stForm"]:has([data-testid="stFormSubmitButton"]) {
     background: #FFFFFF !important;
@@ -558,12 +559,13 @@ button { border-radius: 10px !important; }
     border-radius: 14px !important;
     padding: 24px 28px !important;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02) !important;
+    margin-bottom: 16px !important;
 }
 
 .assump-col-header {
     height: 72px;
     min-height: 72px;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
@@ -583,16 +585,41 @@ button { border-radius: 10px !important; }
     line-height: 1.35;
 }
 
+.assump-field-wrap {
+    margin-bottom: 13px;
+}
+
+.assump-field-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #1D1D1F;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 3px;
+    line-height: 1.25;
+}
+
+.st-key-assumptions_form_wrap [data-testid="stSlider"] {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+    margin-bottom: 0 !important;
+}
+
+.st-key-assumptions_form_wrap [data-testid="stSlider"] > div {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
 .st-key-assumptions_form_wrap [data-testid="stNumberInput"] {
-    margin-bottom: 14px !important;
+    margin-bottom: 0px !important;
 }
 
 .st-key-assumptions_form_wrap div[data-baseweb="input"] {
-    border-radius: 10px !important;
+    border-radius: 8px !important;
     border: 1px solid #E5E5EA !important;
     background: #FFFFFF !important;
-    min-height: 42px !important;
-    height: 42px !important;
+    min-height: 38px !important;
+    height: 38px !important;
     transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
 }
 
@@ -603,14 +630,16 @@ button { border-radius: 10px !important; }
 
 .st-key-assumptions_form_wrap div[data-baseweb="input"] input {
     font-variant-numeric: tabular-nums !important;
-    font-size: 13.5px !important;
-    font-weight: 500 !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
     color: #1D1D1F !important;
+    text-align: right !important;
+    padding: 0 8px !important;
 }
 
 .st-key-assumptions_form_wrap [data-testid="stCheckbox"] {
     margin-top: 4px !important;
-    margin-bottom: 12px !important;
+    margin-bottom: 10px !important;
 }
 .audit-item b { color: #1D1D1F; font-weight: 600; }
 .audit-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
@@ -2018,205 +2047,296 @@ with assumptions_tab:
     st.markdown('<div style="height:1px; background:#E5E5EA; margin:12px 0 16px 0;"></div>', unsafe_allow_html=True)
 
     with st.container(key="assumptions_form_wrap"):
-        with st.form(key("assumptions")):
-            fields = {}
+        fields = {}
 
-            def pct(label, field, lo=0., hi=100., help=None):
-                fields[field] = st.number_input(
+        def render_synced_input(
+            label: str,
+            field: str,
+            lo: float,
+            hi: float,
+            step: float = 0.05,
+            is_percent: bool = True,
+            decimals: int = 2,
+            help_text: str = None,
+            initial_val: float = None,
+        ):
+            num_key = key(field)
+            slider_key = f"slider_{num_key}"
+            canon_key = f"canon_{num_key}"
+
+            if initial_val is not None:
+                raw_init = float(initial_val)
+            else:
+                raw_init = float(getattr(initial, field, 0.0))
+            disp_init = float(raw_init * 100.0) if is_percent else float(raw_init)
+
+            if canon_key not in st.session_state:
+                st.session_state[canon_key] = disp_init
+                st.session_state[num_key] = disp_init
+                clamped = max(float(lo), min(float(hi), disp_init))
+                st.session_state[slider_key] = round(round(clamped / step) * step, 4)
+
+            def _on_slider():
+                val = st.session_state[slider_key]
+                st.session_state[canon_key] = val
+                st.session_state[num_key] = val
+
+            def _on_num():
+                val = st.session_state[num_key]
+                st.session_state[canon_key] = val
+                clamped = max(float(lo), min(float(hi), float(val)))
+                st.session_state[slider_key] = round(round(clamped / step) * step, 4)
+
+            st.markdown(
+                f'<div class="assump-field-wrap">'
+                f'<div class="assump-field-label"><span>{label}</span></div>'
+                f'</div>',
+                help=help_text,
+                unsafe_allow_html=True,
+            )
+
+            c_slider, c_num = st.columns([0.72, 0.28], gap="small")
+            with c_slider:
+                st.slider(
+                    f"Slider for {label}",
+                    min_value=float(lo),
+                    max_value=float(hi),
+                    step=step,
+                    key=slider_key,
+                    on_change=_on_slider,
+                    label_visibility="collapsed",
+                )
+            with c_num:
+                st.number_input(
                     label,
                     min_value=float(lo),
                     max_value=float(hi),
-                    value=float(getattr(initial, field) * 100),
-                    step=.5,
-                    key=key(field),
-                    help=help
-                ) / 100
-
-            col_op, col_macro, col_policy = st.columns([1, 1, 1], gap="medium")
-
-            with col_op:
-                st.markdown(
-                    '<div class="assump-col-header">'
-                    '<div class="assump-col-title">01 · Operating model</div>'
-                    '<div class="assump-col-desc">Revenue growth, operating margins, reinvestment, and capital intensity.</div>'
-                    '</div>',
-                    unsafe_allow_html=True,
+                    step=step,
+                    format=f"%.{decimals}f",
+                    key=num_key,
+                    on_change=_on_num,
+                    label_visibility="collapsed",
                 )
-                # Calculate raw historical revenue CAGR for dynamic tooltip disclosure
-                cagr_hist = None
-                if historical is not None and not historical.empty and "revenue" in historical.index:
-                    s_rev = historical.loc["revenue"].dropna()
-                    if len(s_rev) >= 4 and s_rev.iloc[-4] > 0 and s_rev.iloc[-1] > 0:
-                        cagr_hist = (float(s_rev.iloc[-1]) / float(s_rev.iloc[-4])) ** (1.0 / 3.0) - 1.0
-                    elif len(s_rev) >= 2 and s_rev.iloc[-2] > 0 and s_rev.iloc[-1] > 0:
-                        cagr_hist = (float(s_rev.iloc[-1]) / float(s_rev.iloc[-2])) - 1.0
 
-                sec_raw = (c.get("sector") or "") if c else ""
-                ind_raw = (c.get("industry") or "") if c else ""
-                is_cyclical = (
-                    sec_raw in ("Energy", "Basic Materials") or 
-                    any(x in ind_raw.lower() for x in ("coal", "mining", "metal", "oil", "gas", "farm products", "agriculture", "plantation", "crop", "cooper"))
-                )
-                archetype = getattr(initial, "growth_archetype", None)
-                if not archetype:
-                    if is_cyclical and cagr_hist is not None and cagr_hist < 0.02:
-                        archetype = "commodity_cycle"
-                    elif not is_cyclical and cagr_hist is not None and cagr_hist < 0.0:
-                        archetype = "macro_mature"
-                    else:
-                        archetype = "organic_cagr"
+            canon_val = st.session_state[canon_key]
+            val_out = (canon_val / 100.0) if is_percent else canon_val
+            fields[field] = val_out
+            return val_out
 
-                if archetype == "commodity_cycle":
-                    growth_help = (
-                        f"Normalized to {initial.growth:.1%} via Damodaran Cyclical Commodity framework (trailing audited 3-year CAGR was {cagr_hist:.1%} "
-                        f"due to commodity price cycle trough). In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
-                    )
-                elif archetype == "macro_mature":
-                    growth_help = (
-                        f"Normalized to {initial.growth:.1%} via Indonesia Macro & Mature Industry framework (trailing audited 3-year CAGR was {cagr_hist:.1%} "
-                        f"due to mature market saturation/price competition, rather than commodity cycles). Anchored to Bank Indonesia's long-term macro inflation baseline (2.50%). "
-                        f"In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
-                    )
+        col_op, col_macro, col_policy = st.columns([1, 1, 1], gap="medium")
+
+        with col_op:
+            st.markdown(
+                '<div class="assump-col-header">'
+                '<div class="assump-col-title">01 · Operating model</div>'
+                '<div class="assump-col-desc">Revenue growth, operating margins, reinvestment, and capital intensity.</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            # Calculate raw historical revenue CAGR for dynamic tooltip disclosure
+            cagr_hist = None
+            if historical is not None and not historical.empty and "revenue" in historical.index:
+                s_rev = historical.loc["revenue"].dropna()
+                if len(s_rev) >= 4 and s_rev.iloc[-4] > 0 and s_rev.iloc[-1] > 0:
+                    cagr_hist = (float(s_rev.iloc[-1]) / float(s_rev.iloc[-4])) ** (1.0 / 3.0) - 1.0
+                elif len(s_rev) >= 2 and s_rev.iloc[-2] > 0 and s_rev.iloc[-1] > 0:
+                    cagr_hist = (float(s_rev.iloc[-1]) / float(s_rev.iloc[-2])) - 1.0
+
+            sec_raw = (c.get("sector") or "") if c else ""
+            ind_raw = (c.get("industry") or "") if c else ""
+            is_cyclical = (
+                sec_raw in ("Energy", "Basic Materials") or 
+                any(x in ind_raw.lower() for x in ("coal", "mining", "metal", "oil", "gas", "farm products", "agriculture", "plantation", "crop", "cooper"))
+            )
+            archetype = getattr(initial, "growth_archetype", None)
+            if not archetype:
+                if is_cyclical and cagr_hist is not None and cagr_hist < 0.02:
+                    archetype = "commodity_cycle"
+                elif not is_cyclical and cagr_hist is not None and cagr_hist < 0.0:
+                    archetype = "macro_mature"
                 else:
-                    growth_help = (
-                        f"Anchored to audited 3-year historical revenue CAGR ({initial.growth:.1%}). "
-                        f"In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
-                    )
+                    archetype = "organic_cagr"
 
-                pct(
-                    "Growth · years 1–3 (%)", "growth", -50, 100,
-                    help=growth_help
+            if archetype == "commodity_cycle":
+                growth_help = (
+                    f"Normalized to {initial.growth:.1%} via Damodaran Cyclical Commodity framework (trailing audited 3-year CAGR was {cagr_hist:.1%} "
+                    f"due to commodity price cycle trough). In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
                 )
-                pct(
-                    "Growth · year 5 (%)", "mature_growth", -50, 50,
-                    help="Target steady-state revenue growth rate at Year 5. In Year 4, growth smoothly transitions (2/3 initial + 1/3 mature) toward this level, reflecting competitive fade toward long-term GDP growth."
+            elif archetype == "macro_mature":
+                growth_help = (
+                    f"Normalized to {initial.growth:.1%} via Indonesia Macro & Mature Industry framework (trailing audited 3-year CAGR was {cagr_hist:.1%} "
+                    f"due to mature market saturation/price competition, rather than commodity cycles). Anchored to Bank Indonesia's long-term macro inflation baseline (2.50%). "
+                    f"In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
                 )
-                pct(
-                    "EBIT margin · years 1–3 (%)", "ebit_margin", -50, 80,
-                    help="Operating profit margin before interest and taxes: EBIT / Revenue. Represents core business operating profitability. Inferred baseline is derived from the latest audited annual statement."
-                )
-                pct(
-                    "EBIT margin · year 5 (%)", "mature_margin", -50, 80,
-                    help="Target operating margin at Year 5. In Year 4, the model smoothly transitions (2/3 initial + 1/3 mature) toward this steady-state level, reflecting long-term competitive convergence or margin expansion."
-                )
-                pct(
-                    "Gross margin (%)", "gross_margin", 1, 100,
-                    help="Direct operating profitability after Cost of Goods Sold (COGS): (Revenue - COGS) / Revenue. In this model, cash OpEx is dynamically derived as the residual (Revenue - COGS - D&A - EBIT). Higher gross margin expands operating cushion."
-                )
-                pct(
-                    "Corporate tax rate (%)", "tax_rate", 0, 60,
-                    help="Inferred baseline is 22.0% (Indonesian statutory corporate rate under UU HPP No. 7/2021). The model includes Damodaran Net Operating Loss (NOL) carryforward protection."
-                )
-                pct(
-                    "Capex / revenue (%)", "capex_pct", 0, 100,
-                    help="Annual capital expenditure as a percentage of revenue: CapEx / Revenue. Inferred baseline uses the 4-year statistical median (2022–2025) to smooth out lumpy expansion projects and reflect ongoing maintenance and productive asset replacement."
-                )
-                pct(
-                    "D&A / opening fixed assets (%)", "depreciation_rate", 0, 100,
-                    help="Accounting amortization rate of net fixed assets: D&A / Opening Net PP&E. Governs how fast physical plant, machinery, and equipment depreciate on the balance sheet and are added back to operating cash flow in FCFF."
-                )
-                pct(
-                    "Non-cash working capital / revenue (%)", "nwc_pct", -50, 80,
-                    help="Damodaran Non-Cash Working Capital ratio: ((AR + Inventory + Other CA) - (AP + Other CL)) / Revenue. Measures operational liquidity tied up in the business. Working capital is driven by non-cash NWC % of revenue instead of turnover days."
-                )
-                pct(
-                    "Minimum cash / revenue (%)", "minimum_cash_pct", 0, 100,
-                    help="Minimum operational liquidity cushion required for day-to-day operations (default 2.0% of revenue). Shortfalls below this floor trigger liquidity revolver financing in the cash flow roll-forward."
+            else:
+                growth_help = (
+                    f"Anchored to audited 3-year historical revenue CAGR ({initial.growth:.1%}). "
+                    f"In Years 4–5, revenue growth smoothly transitions toward Year 5 mature growth ({initial.mature_growth:.1%})."
                 )
 
-                # Preserve background cash roll-forward fields
-                fields["ar_days"] = float(initial.ar_days)
-                fields["inventory_days"] = float(initial.inventory_days)
-                fields["ap_days"] = float(initial.ap_days)
-                fields["other_ca_pct"] = float(initial.other_ca_pct)
-                fields["other_cl_pct"] = float(initial.other_cl_pct)
-                fields["dividend_payout"] = float(initial.dividend_payout)
-                fields["annual_repayment"] = float(initial.annual_repayment)
+            render_synced_input(
+                "Growth · years 1–3 (%)", "growth", -50.0, 100.0, step=0.05, is_percent=True, decimals=2,
+                help_text=growth_help
+            )
+            render_synced_input(
+                "Growth · year 5 (%)", "mature_growth", -50.0, 50.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Target steady-state revenue growth rate at Year 5. In Year 4, growth smoothly transitions (2/3 initial + 1/3 mature) toward this level, reflecting competitive fade toward long-term GDP growth."
+            )
+            render_synced_input(
+                "EBIT margin · years 1–3 (%)", "ebit_margin", -50.0, 80.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Operating profit margin before interest and taxes: EBIT / Revenue. Represents core business operating profitability. Inferred baseline is derived from the latest audited annual statement."
+            )
+            render_synced_input(
+                "EBIT margin · year 5 (%)", "mature_margin", -50.0, 80.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Target operating margin at Year 5. In Year 4, the model smoothly transitions (2/3 initial + 1/3 mature) toward this steady-state level, reflecting long-term competitive convergence or margin expansion."
+            )
+            render_synced_input(
+                "Gross margin (%)", "gross_margin", 1.0, 100.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Direct operating profitability after Cost of Goods Sold (COGS): (Revenue - COGS) / Revenue. In this model, cash OpEx is dynamically derived as the residual (Revenue - COGS - D&A - EBIT). Higher gross margin expands operating cushion."
+            )
+            render_synced_input(
+                "Corporate tax rate (%)", "tax_rate", 0.0, 60.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Inferred baseline is 22.0% (Indonesian statutory corporate rate under UU HPP No. 7/2021). The model includes Damodaran Net Operating Loss (NOL) carryforward protection."
+            )
+            render_synced_input(
+                "Capex / revenue (%)", "capex_pct", 0.0, 100.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Annual capital expenditure as a percentage of revenue: CapEx / Revenue. Inferred baseline uses the 4-year statistical median (2022–2025) to smooth out lumpy expansion projects and reflect ongoing maintenance and productive asset replacement."
+            )
+            render_synced_input(
+                "D&A / opening fixed assets (%)", "depreciation_rate", 0.0, 100.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Accounting amortization rate of net fixed assets: D&A / Opening Net PP&E. Governs how fast physical plant, machinery, and equipment depreciate on the balance sheet and are added back to operating cash flow in FCFF."
+            )
+            render_synced_input(
+                "Non-cash working capital / revenue (%)", "nwc_pct", -50.0, 80.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Damodaran Non-Cash Working Capital ratio: ((AR + Inventory + Other CA) - (AP + Other CL)) / Revenue. Measures operational liquidity tied up in the business. Working capital is driven by non-cash NWC % of revenue instead of turnover days."
+            )
+            render_synced_input(
+                "Minimum cash / revenue (%)", "minimum_cash_pct", 0.0, 100.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Minimum operational liquidity cushion required for day-to-day operations (default 2.0% of revenue). Shortfalls below this floor trigger liquidity revolver financing in the cash flow roll-forward."
+            )
 
-            with col_macro:
-                st.markdown(
-                    '<div class="assump-col-header">'
-                    '<div class="assump-col-title">02 · Macro & WACC</div>'
-                    '<div class="assump-col-desc">Damodaran ERP, Indonesia CRP, JKSE regression beta, and capital structure.</div>'
-                    '</div>',
-                    unsafe_allow_html=True,
-                )
-                pct(
-                    "Risk-free rate (%)", "risk_free", 0, 30,
-                    help="Indonesian 10-Year Government Benchmark Bond yield (FR series) as of Dec 31, 2025 (6.64%). Sovereign baseline risk-free rate used in CAPM."
-                )
-                pct(
-                    "Mature market ERP (%)", "mature_equity_premium", 0, 20,
-                    help="Damodaran published NYU Stern mature equity risk premium (4.60%). Baseline equity risk compensation for mature markets (S&P 500 baseline)."
-                )
-                m_erp = fields.get("mature_equity_premium", initial.mature_equity_premium)
-                c_crp = fields.get("country_risk_premium", initial.country_risk_premium)
-                pct(
-                    "Indonesia country risk premium (CRP) (%)", "country_risk_premium", 0, 20,
-                    help=f"Damodaran published Indonesia Country Risk Premium ({c_crp*100:.2f}%), based on sovereign rating (Baa2/BBB) and relative equity volatility. Total Indonesia ERP = Mature ERP ({m_erp*100:.2f}%) + CRP ({c_crp*100:.2f}%) = {((m_erp + c_crp)*100):.2f}%."
-                )
-                fields["equity_premium"] = fields["mature_equity_premium"]
-                fields["beta"] = st.number_input("Levered beta", min_value=-2.0, max_value=4., value=float(initial.beta), step=.05, key=key("beta"), help="Derived from 5Y monthly regression vs ^JKSE with Blume mean-reversion adjustment.")
-                pct(
-                    "Pre-tax borrowing cost (%)", "debt_rate", 0, 50,
-                    help="Effective pre-tax debt borrowing rate (Kd = Interest Expense / Total Debt). In accordance with Damodaran currency consistency rules, Kd is floored at sovereign Rf + 150 bps corporate spread if reported rates reflect offshore foreign-currency (e.g. USD) obligations."
-                )
-                pct(
-                    "Target debt / capital (%)", "debt_weight", 0, 95,
-                    help="Target capital structure debt weight (D / (D + E)). Inferred from latest balance sheet book debt vs market capitalization."
-                )
-                override = st.checkbox(
-                    "Override calculated WACC",
-                    value=initial.wacc_override is not None,
-                    key=key("override"),
-                    help="By default, WACC is automatically calculated from market risk, beta, and debt costs. Check this box if you want to bypass the formula and manually type your own discount rate (e.g. an internal 12% fund hurdle rate)."
-                )
-                custom_wacc = st.number_input(
-                    "WACC override (%)",
-                    min_value=.1,
-                    max_value=60.,
-                    value=float((initial.wacc_override or initial.wacc) * 100),
-                    step=.25,
-                    key=key("custom_wacc"),
-                    help="Custom discount rate applied to the DCF valuation when 'Override calculated WACC' is checked above, then submitted via 'Apply assumptions'."
-                )
-                fields["wacc_override"] = custom_wacc / 100 if override else None
+            # Preserve background cash roll-forward fields
+            fields["ar_days"] = float(initial.ar_days)
+            fields["inventory_days"] = float(initial.inventory_days)
+            fields["ap_days"] = float(initial.ap_days)
+            fields["other_ca_pct"] = float(initial.other_ca_pct)
+            fields["other_cl_pct"] = float(initial.other_cl_pct)
+            fields["dividend_payout"] = float(initial.dividend_payout)
+            fields["annual_repayment"] = float(initial.annual_repayment)
 
-            with col_policy:
-                st.markdown(
-                    '<div class="assump-col-header">'
-                    '<div class="assump-col-title">03 · Valuation policy</div>'
-                    '<div class="assump-col-desc">Multi-approach weighting, terminal parameters, and balance sheet claims bridge.</div>'
-                    '</div>',
-                    unsafe_allow_html=True,
-                )
-                pct(
-                    "Terminal growth (%)", "terminal_growth", 0, 15,
-                    help="Damodaran perpetual growth rate in Gordon Growth Terminal Value. Default 2.50% aligns with Bank Indonesia long-term central inflation target. Strictly bounded below Indonesian GDP ceiling (4.00%) and WACC."
-                )
-                hist_roic_val = compute_historical_roic(historical, b, tax_rate=initial.tax_rate)
-                reinv_terminal = (initial.terminal_growth / initial.terminal_roic) if initial.terminal_roic > 0 else 0.0
-                pct(
-                    "Terminal ROIC (%)", "terminal_roic", .1, 100,
-                    help=(
-                        f"Calibrated from audited historical median ROIC ({hist_roic_val*100:.1f}%) fading to {initial.terminal_roic*100:.1f}% "
-                        f"below median as growth decelerates to perpetuity (WACC {initial.wacc*100:.1f}%). "
-                        f"Implied sustainable reinvestment rate: {reinv_terminal*100:.1f}% (g / ROIC)."
-                    )
-                )
-                pct(
-                    "Valuation weight · DCF (%)", "dcf_weight", 0, 100,
-                    help="Weight assigned to DCF (FCFF) intrinsic valuation in the blended fair value recommendation. Default 75% aligns with institutional anchor principle."
-                )
-                pct(
-                    "Valuation weight · Relative (%)", "relative_weight", 0, 100,
-                    help="Weight assigned to Comparable Peers relative valuation in the blended fair value. Default 25% provides an empirical market cross-check when peer similarity criteria are met."
-                )
-                fields["other_claims"] = st.number_input("Minorities / other equity claims (IDR bn)", min_value=0., value=float(initial.other_claims), key=key("claims"), help="Deducts reported minority interests (NCI) from EV to bridge to Equity Value.")
-                fields["nonoperating_assets"] = st.number_input("Additional non-operating assets (IDR bn)", min_value=0., value=float(initial.nonoperating_assets), key=key("nonop"), help="Adds non-operating investments / associates to EV.")
+        with col_macro:
+            st.markdown(
+                '<div class="assump-col-header">'
+                '<div class="assump-col-title">02 · Macro & WACC</div>'
+                '<div class="assump-col-desc">Damodaran ERP, Indonesia CRP, JKSE regression beta, and capital structure.</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            render_synced_input(
+                "Risk-free rate (%)", "risk_free", 0.0, 30.0, step=0.01, is_percent=True, decimals=2,
+                help_text="Indonesian 10-Year Government Benchmark Bond yield (FR series) as of Dec 31, 2025 (6.64%). Sovereign baseline risk-free rate used in CAPM."
+            )
+            render_synced_input(
+                "Mature market ERP (%)", "mature_equity_premium", 0.0, 20.0, step=0.01, is_percent=True, decimals=2,
+                help_text="Damodaran published NYU Stern mature equity risk premium (4.60%). Baseline equity risk compensation for mature markets (S&P 500 baseline)."
+            )
+            m_erp = fields.get("mature_equity_premium", initial.mature_equity_premium)
+            c_crp = fields.get("country_risk_premium", initial.country_risk_premium)
+            render_synced_input(
+                "Indonesia country risk premium (CRP) (%)", "country_risk_premium", 0.0, 20.0, step=0.01, is_percent=True, decimals=2,
+                help_text=f"Damodaran published Indonesia Country Risk Premium ({c_crp*100:.2f}%), based on sovereign rating (Baa2/BBB) and relative equity volatility. Total Indonesia ERP = Mature ERP ({m_erp*100:.2f}%) + CRP ({c_crp*100:.2f}%) = {((m_erp + c_crp)*100):.2f}%."
+            )
+            fields["equity_premium"] = fields["mature_equity_premium"]
+            render_synced_input(
+                "Levered beta", "beta", -2.0, 4.0, step=0.01, is_percent=False, decimals=2,
+                help_text="Derived from 5Y monthly regression vs ^JKSE with Blume mean-reversion adjustment."
+            )
+            render_synced_input(
+                "Pre-tax borrowing cost (%)", "debt_rate", 0.0, 50.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Effective pre-tax debt borrowing rate (Kd = Interest Expense / Total Debt). In accordance with Damodaran currency consistency rules, Kd is floored at sovereign Rf + 150 bps corporate spread if reported rates reflect offshore foreign-currency (e.g. USD) obligations."
+            )
+            render_synced_input(
+                "Target debt / capital (%)", "debt_weight", 0.0, 95.0, step=0.05, is_percent=True, decimals=2,
+                help_text="Target capital structure debt weight (D / (D + E)). Inferred from latest balance sheet book debt vs market capitalization."
+            )
+            override = st.checkbox(
+                "Override calculated WACC",
+                value=initial.wacc_override is not None,
+                key=key("override"),
+                help="By default, WACC is automatically calculated from market risk, beta, and debt costs. Check this box if you want to bypass the formula and manually type your own discount rate (e.g. an internal 12% fund hurdle rate)."
+            )
+            custom_wacc_init = (initial.wacc_override or initial.wacc)
+            custom_wacc = render_synced_input(
+                "WACC override (%)", "custom_wacc", 0.1, 60.0, step=0.01, is_percent=True, decimals=2, initial_val=custom_wacc_init,
+                help_text="Custom discount rate applied to the DCF valuation when 'Override calculated WACC' is checked above, then submitted via 'Apply assumptions'."
+            )
+            fields["wacc_override"] = custom_wacc if override else None
 
-            st.divider()
-            applied = st.form_submit_button("Apply assumptions", type="primary", use_container_width=True)
+        with col_policy:
+            st.markdown(
+                '<div class="assump-col-header">'
+                '<div class="assump-col-title">03 · Valuation policy</div>'
+                '<div class="assump-col-desc">Multi-approach weighting, terminal parameters, and balance sheet claims bridge.</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            render_synced_input(
+                "Terminal growth (%)", "terminal_growth", 0.0, 15.0, step=0.01, is_percent=True, decimals=2,
+                help_text="Damodaran perpetual growth rate in Gordon Growth Terminal Value. Default 2.50% aligns with Bank Indonesia long-term central inflation target. Strictly bounded below Indonesian GDP ceiling (4.00%) and WACC."
+            )
+            hist_roic_val = compute_historical_roic(historical, b, tax_rate=initial.tax_rate)
+            reinv_terminal = (initial.terminal_growth / initial.terminal_roic) if initial.terminal_roic > 0 else 0.0
+            render_synced_input(
+                "Terminal ROIC (%)", "terminal_roic", 0.1, 100.0, step=0.01, is_percent=True, decimals=2,
+                help_text=(
+                    f"Calibrated from audited historical median ROIC ({hist_roic_val*100:.1f}%) fading to {initial.terminal_roic*100:.1f}% "
+                    f"below median as growth decelerates to perpetuity (WACC {initial.wacc*100:.1f}%). "
+                    f"Implied sustainable reinvestment rate: {reinv_terminal*100:.1f}% (g / ROIC)."
+                )
+            )
+            render_synced_input(
+                "Valuation weight · DCF (%)", "dcf_weight", 0.0, 100.0, step=0.5, is_percent=True, decimals=2,
+                help_text="Weight assigned to DCF (FCFF) intrinsic valuation in the blended fair value recommendation. Default 75% aligns with institutional anchor principle."
+            )
+            render_synced_input(
+                "Valuation weight · Relative (%)", "relative_weight", 0.0, 100.0, step=0.5, is_percent=True, decimals=2,
+                help_text="Weight assigned to Comparable Peers relative valuation in the blended fair value. Default 25% provides an empirical market cross-check when peer similarity criteria are met."
+            )
+
+            st.markdown(
+                '<div class="assump-field-wrap" style="margin-top:6px;">'
+                '<div class="assump-field-label"><span>Minorities / other equity claims (IDR bn)</span></div>'
+                '</div>',
+                help="Deducts reported minority interests (NCI) from EV to bridge to Equity Value.",
+                unsafe_allow_html=True,
+            )
+            fields["other_claims"] = st.number_input(
+                "Minorities / other equity claims (IDR bn)",
+                min_value=0.,
+                value=float(initial.other_claims),
+                key=key("claims"),
+                help="Deducts reported minority interests (NCI) from EV to bridge to Equity Value.",
+                label_visibility="collapsed",
+            )
+
+            st.markdown(
+                '<div class="assump-field-wrap" style="margin-top:6px;">'
+                '<div class="assump-field-label"><span>Additional non-operating assets (IDR bn)</span></div>'
+                '</div>',
+                help="Adds non-operating investments / associates to EV.",
+                unsafe_allow_html=True,
+            )
+            fields["nonoperating_assets"] = st.number_input(
+                "Additional non-operating assets (IDR bn)",
+                min_value=0.,
+                value=float(initial.nonoperating_assets),
+                key=key("nonop"),
+                help="Adds non-operating investments / associates to EV.",
+                label_visibility="collapsed",
+            )
+
+        st.divider()
+        applied = st.button("Apply assumptions", type="primary", use_container_width=True)
     base_a = make_assumptions(**fields)
     if applied:
         st.session_state[key("applied_assumptions")] = asdict(base_a)
