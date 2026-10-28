@@ -91,3 +91,29 @@ def test_generate_valuation_pdf_edge_cases():
     )
     assert isinstance(pdf_bytes, bytes)
     assert pdf_bytes.startswith(b"%PDF-")
+
+
+def test_generate_valuation_pdf_page_budget_exact_2_pages():
+    import re
+    from valuation.data import demo_company
+    from valuation.model import BASE_FIELDS, forecast, dcf
+    c = demo_company()
+    b = c["historical"].loc[list(BASE_FIELDS)].iloc[:, -1].to_dict()
+    a = Assumptions()
+    f = forecast(b, a, 2026)
+    r = dcf(f, b, a, 8.0)
+    pdf_bytes = generate_valuation_pdf(
+        company=c,
+        assumptions=a,
+        dcf_result=r,
+        scenario_rows=[
+            {"Scenario": "Bear", "Probability": "25%", "Value / share": 1050.0},
+            {"Scenario": "Base", "Probability": "50%", "Value / share": 1380.0},
+            {"Scenario": "Bull", "Probability": "25%", "Value / share": 1620.0},
+        ],
+        effective_price=1380.0,
+        rel_price=1350.0,
+    )
+    page_count = len(re.findall(rb'/Type\s*/Page\b', pdf_bytes))
+    assert page_count == 2
+    assert len(pdf_bytes) > 20000

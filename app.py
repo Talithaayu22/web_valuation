@@ -1424,10 +1424,12 @@ def activate(company, saved=None):
 
 
 def pack_company(c):
-    return {k: v for k, v in c.items() if k not in ("historical", "raw")} | {
-        "historical": c["historical"].to_json(orient="split", date_format="iso"),
-        "raw": {name: frame.to_json(orient="split", date_format="iso") for name, frame in c["raw"].items()}
-    }
+    packed = {k: v for k, v in c.items() if k not in ("historical", "raw", "price_history")}
+    packed["historical"] = c["historical"].to_json(orient="split", date_format="iso")
+    packed["raw"] = {name: frame.to_json(orient="split", date_format="iso") for name, frame in c.get("raw", {}).items()}
+    if "price_history" in c and isinstance(c["price_history"], (pd.Series, pd.DataFrame)):
+        packed["price_history"] = c["price_history"].to_json(orient="split", date_format="iso")
+    return packed
 
 
 def unpack_company(c):
@@ -1441,6 +1443,12 @@ def unpack_company(c):
             out["name"] = idx_meta["name"]
     out["historical"] = pd.read_json(StringIO(c["historical"]), orient="split", convert_axes=False)
     out["raw"] = {name: pd.read_json(StringIO(data), orient="split", convert_axes=False) for name, data in c.get("raw", {}).items()}
+    if "price_history" in c and isinstance(c["price_history"], str):
+        try:
+            ph = pd.read_json(StringIO(c["price_history"]), orient="split")
+            out["price_history"] = ph.squeeze("columns") if isinstance(ph, pd.DataFrame) and ph.shape[1] == 1 else ph
+        except Exception:
+            out["price_history"] = None
     return out
 
 

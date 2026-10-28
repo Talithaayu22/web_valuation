@@ -314,6 +314,15 @@ def fetch_company(symbol):
     except Exception:
         reg_beta = None
 
+    # Fetch 1-year daily price history for institutional scenario charts
+    price_history = None
+    try:
+        ph_raw = t.history(period="1y", interval="1d")
+        if ph_raw is not None and not ph_raw.empty and "Close" in ph_raw.columns:
+            price_history = ph_raw["Close"].dropna()
+    except Exception:
+        price_history = None
+
     if reg_beta is not None and math.isfinite(reg_beta):
         beta = reg_beta
     else:
@@ -350,12 +359,15 @@ def fetch_company(symbol):
         (fast_info and getattr(fast_info, "get", lambda _: None)("lastPrice"))
     )
     if cur_price is None or cur_price <= 0:
-        try:
-            h = t.history(period="5d")
-            if h is not None and not h.empty and "Close" in h.columns and not h["Close"].dropna().empty:
-                cur_price = float(h["Close"].dropna().iloc[-1])
-        except Exception:
-            pass
+        if price_history is not None and not price_history.empty:
+            cur_price = float(price_history.iloc[-1])
+        else:
+            try:
+                h = t.history(period="5d")
+                if h is not None and not h.empty and "Close" in h.columns and not h["Close"].dropna().empty:
+                    cur_price = float(h["Close"].dropna().iloc[-1])
+            except Exception:
+                pass
 
     cur_shares = number(
         info.get("sharesOutstanding") or
@@ -401,6 +413,7 @@ def fetch_company(symbol):
         beta=beta,
         market_cap=cur_mkt_cap,
         fetched_at=datetime.now(timezone.utc).isoformat(),
+        price_history=price_history,
         historical=historical,
         provenance=provenance,
         raw={"Income statement": income, "Balance sheet": balance, "Cash flow": cashflow},
@@ -448,6 +461,17 @@ def demo_company():
             nonoperating_assets=0.0,
         )
         hist[f"{year}-12-31"] = row
+
+    # Representative 1-year daily price series ending at 1250 IDR
+    end_date = datetime.now(timezone.utc)
+    dates = pd.date_range(end=end_date, periods=252, freq="B")
+    import numpy as np
+    rng = np.random.RandomState(42)
+    shocks = rng.normal(0.0003, 0.012, len(dates))
+    raw_p = 1250.0 / np.cumprod(1 + shocks[::-1])[::-1]
+    raw_p[-1] = 1250.0
+    demo_ph = pd.Series(raw_p, index=dates, name="Close")
+
     return dict(
         symbol="DEMO",
         name="Nusantara Consumer · Fictional company",
@@ -461,6 +485,7 @@ def demo_company():
         beta=1.,
         market_cap=10000e9,
         fetched_at="Illustrative data, not market data",
+        price_history=demo_ph,
         historical=pd.DataFrame(hist),
         provenance={},
         raw={},
