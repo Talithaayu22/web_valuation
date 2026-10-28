@@ -201,3 +201,21 @@ def test_opening_inputs_mapping_table_refinement():
     assert "cogs" in list(de_df["Key"])
     assert "Revenue" in list(de_df["Account"])
 
+
+def test_tri_pillar_kpi_card_compact_height_and_scoped_styling():
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py", default_timeout=30).run()
+    assert not app.exception
+    rendered_markdown = " ".join(x.value for x in app.markdown)
+
+    # 1. Scoped CSS for tri-pillar compact KPI height (approx 100-110px)
+    assert ".st-key-tri_pillar_kpi_wrap [data-testid=\"stMetric\"]" in rendered_markdown
+    assert "min-height: 104px" in rendered_markdown or "height: 106px" in rendered_markdown
+    assert "margin-top: 14px" in rendered_markdown  # gap between KPI card and supporting metric box
+
+    # 2. Tri-pillar metrics present and correctly labeled
+    metric_labels = [m.label for m in app.metric]
+    assert "Reference price" in metric_labels
+    assert "DCF value / share" in metric_labels
+    assert "Relative value / share" in metric_labels
+
+

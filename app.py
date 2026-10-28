@@ -673,6 +673,87 @@ button { border-radius: 10px !important; }
 .p-row b { color: #1D1D1F; font-weight: 600; font-variant-numeric: tabular-nums; }
 .pillar-footer { font-size: 11px; color: #6E6E73; border-top: 1px dashed #E5E5EA; padding-top: 8px; margin-top: auto; }
 
+/* --- Scoped Compact KPI Styling for Valuation Synthesis Tri-Pillar Comparison --- */
+.st-key-tri_pillar_kpi_wrap [data-testid="stMetric"] {
+    min-height: 104px !important;
+    height: 106px !important;
+    max-height: 110px !important;
+    padding: 16px 18px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    gap: 4px !important;
+    border-radius: 14px !important;
+    background: #FFFFFF !important;
+    border: 1px solid #E5E5EA !important;
+    box-sizing: border-box !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+}
+
+.st-key-tri_pillar_kpi_wrap [data-testid="stMetric"]:hover {
+    border-color: #087F69 !important;
+    box-shadow: 0 2px 8px rgba(8, 127, 105, 0.06) !important;
+}
+
+.st-key-tri_pillar_kpi_wrap [data-testid="stMetricLabel"] {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin-bottom: 0px !important;
+    display: flex !important;
+    align-items: center !important;
+    line-height: 1.25 !important;
+}
+
+.st-key-tri_pillar_kpi_wrap [data-testid="stMetricLabel"],
+.st-key-tri_pillar_kpi_wrap [data-testid="stMetricLabel"] * {
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    color: #6E6E73 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+    line-height: 1.25 !important;
+}
+
+.st-key-tri_pillar_kpi_wrap [data-testid="stMetricValue"] {
+    margin-top: 2px !important;
+    line-height: 1.15 !important;
+}
+
+.st-key-tri_pillar_kpi_wrap [data-testid="stMetricValue"],
+.st-key-tri_pillar_kpi_wrap [data-testid="stMetricValue"] * {
+    font-size: clamp(1.30rem, 1.55vw, 1.65rem) !important;
+    font-weight: 700 !important;
+    color: #1D1D1F !important;
+    font-variant-numeric: tabular-nums !important;
+    line-height: 1.15 !important;
+}
+
+/* Eliminate column vertical stretch on metric inside tri-pillar */
+.st-key-tri_pillar_kpi_wrap div[data-testid="column"] > div:has([data-testid="stMetric"]),
+.st-key-tri_pillar_kpi_wrap div[data-testid="column"] > div[data-testid="stMetric"] {
+    flex: 0 0 auto !important;
+    height: auto !important;
+}
+
+/* Regulate spacing between KPI card and supporting metric box to 12-16px */
+.st-key-tri_pillar_kpi_wrap .pillar-metrics {
+    margin-top: 14px !important;
+    margin-bottom: 12px !important;
+}
+
+.st-key-tri_pillar_kpi_wrap .pillar-tag {
+    margin-bottom: 8px !important;
+}
+
+@media (max-width: 900px) {
+    .st-key-tri_pillar_kpi_wrap [data-testid="stMetric"] {
+        min-height: 98px !important;
+        height: auto !important;
+        padding: 14px 16px !important;
+    }
+}
+
 /* --- DCF & Relative Valuation Tab: Symmetrical KPI Grid, Equity Bridge & Terminal Economics --- */
 .dcf-kpi-grid {
     display: grid;
@@ -2746,57 +2827,58 @@ with overview:
 
     # 4. Tri-Pillar Method Comparison (Level 2 — Explanation)
     st.markdown("### Valuation Synthesis · Tri-Pillar Method Comparison")
-    p_col1, p_col2, p_col3 = st.columns(3)
-    with p_col1:
-        st.markdown('<div class="pillar-tag pillar-tag-market"><span>PILLAR 1 · OBSERVED MARKET</span><span>0% WEIGHT</span></div>', unsafe_allow_html=True)
-        st.metric(
-            "Reference price",
-            fmt_idr(price, default="Not available"),
-            help="Current reference market trading price on the Indonesia Stock Exchange (IDX).",
-        )
-        st.markdown(
-            f"""<div class="pillar-metrics">
-                <div class="p-row"><span>Market Cap</span><b>{fmt_idr(mkt_cap, prefix='Rp ', default='—')} bn</b></div>
-                <div class="p-row"><span>Trailing P/E</span><b>{pe_str}</b></div>
-                <div class="p-row"><span>EV / EBITDA</span><b>{evebitda_str}</b></div>
-                <div class="p-row"><span>Diluted Shares</span><b>{fmt_shares(shares)}</b></div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
+    with st.container(key="tri_pillar_kpi_wrap"):
+        p_col1, p_col2, p_col3 = st.columns(3)
+        with p_col1:
+            st.markdown('<div class="pillar-tag pillar-tag-market"><span>PILLAR 1 · OBSERVED MARKET</span><span>0% WEIGHT</span></div>', unsafe_allow_html=True)
+            st.metric(
+                "Reference price",
+                fmt_idr(price, default="Not available"),
+                help="Current reference market trading price on the Indonesia Stock Exchange (IDX).",
+            )
+            st.markdown(
+                f"""<div class="pillar-metrics">
+                    <div class="p-row"><span>Market Cap</span><b>{fmt_idr(mkt_cap, prefix='Rp ', default='—')} bn</b></div>
+                    <div class="p-row"><span>Trailing P/E</span><b>{pe_str}</b></div>
+                    <div class="p-row"><span>EV / EBITDA</span><b>{evebitda_str}</b></div>
+                    <div class="p-row"><span>Diluted Shares</span><b>{fmt_shares(shares)}</b></div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
-    with p_col2:
-        st.markdown(f'<div class="pillar-tag pillar-tag-dcf"><span>PILLAR 2 · INTRINSIC DCF ANCHOR</span><span>{approach_eval["dcf_weight"]:.0%} WEIGHT</span></div>', unsafe_allow_html=True)
-        st.metric(
-            "DCF value / share",
-            fmt_idr(dcf_p, default="Not eligible" if is_dcf_ineligible else "Check assumptions") if (dcf_p and dcf_p > 0) else ("Not eligible" if is_dcf_ineligible else "Check assumptions"),
-            help=f"Probability-weighted expected DCF value across Bear ({norm_probs.get('Bear', 0.25):.0%}), Base ({norm_probs.get('Base', 0.50):.0%}), and Bull ({norm_probs.get('Bull', 0.25):.0%}) scenarios. Base case alone: {fmt_idr(base_dcf_price)}." if base_dcf_price else "Discounted Cash Flow intrinsic valuation.",
-        )
-        st.markdown(
-            f"""<div class="pillar-metrics">
-                <div class="p-row"><span>Base Case ({norm_probs.get('Base', 0.50):.0%})</span><b>{fmt_idr(base_dcf_price)}</b></div>
-                <div class="p-row"><span>Bear Case ({norm_probs.get('Bear', 0.25):.0%})</span><b>{fmt_idr(bear_price)}</b></div>
-                <div class="p-row"><span>Bull Case ({norm_probs.get('Bull', 0.25):.0%})</span><b>{fmt_idr(bull_price)}</b></div>
-                <div class="p-row"><span>WACC · Terminal g</span><b>{a.wacc*100:.2f}% · {a.terminal_growth*100:.2f}%</b></div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
+        with p_col2:
+            st.markdown(f'<div class="pillar-tag pillar-tag-dcf"><span>PILLAR 2 · INTRINSIC DCF ANCHOR</span><span>{approach_eval["dcf_weight"]:.0%} WEIGHT</span></div>', unsafe_allow_html=True)
+            st.metric(
+                "DCF value / share",
+                fmt_idr(dcf_p, default="Not eligible" if is_dcf_ineligible else "Check assumptions") if (dcf_p and dcf_p > 0) else ("Not eligible" if is_dcf_ineligible else "Check assumptions"),
+                help=f"Probability-weighted expected DCF value across Bear ({norm_probs.get('Bear', 0.25):.0%}), Base ({norm_probs.get('Base', 0.50):.0%}), and Bull ({norm_probs.get('Bull', 0.25):.0%}) scenarios. Base case alone: {fmt_idr(base_dcf_price)}." if base_dcf_price else "Discounted Cash Flow intrinsic valuation.",
+            )
+            st.markdown(
+                f"""<div class="pillar-metrics">
+                    <div class="p-row"><span>Base Case ({norm_probs.get('Base', 0.50):.0%})</span><b>{fmt_idr(base_dcf_price)}</b></div>
+                    <div class="p-row"><span>Bear Case ({norm_probs.get('Bear', 0.25):.0%})</span><b>{fmt_idr(bear_price)}</b></div>
+                    <div class="p-row"><span>Bull Case ({norm_probs.get('Bull', 0.25):.0%})</span><b>{fmt_idr(bull_price)}</b></div>
+                    <div class="p-row"><span>WACC · Terminal g</span><b>{a.wacc*100:.2f}% · {a.terminal_growth*100:.2f}%</b></div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
-    with p_col3:
-        st.markdown(f'<div class="pillar-tag pillar-tag-rel"><span>PILLAR 3 · RELATIVE PEER CROSS-CHECK</span><span>{approach_eval["rel_weight"]:.0%} WEIGHT</span></div>', unsafe_allow_html=True)
-        st.metric(
-            "Relative value / share",
-            fmt_idr(rel_price, default="Needs >= 2 peers") if (pd.notna(rel_price) and rel_price > 0) else "Needs >= 2 peers",
-            help="Harmonic or median peer multiple cross-check across eligible IDX-IC sub-industry peer companies.",
-        )
-        st.markdown(
-            f"""<div class="pillar-metrics">
-                <div class="p-row"><span>Lower Quartile (P25)</span><b>{q25_str}</b></div>
-                <div class="p-row"><span>Upper Quartile (P75)</span><b>{q75_str}</b></div>
-                <div class="p-row"><span>Gated Peers</span><b>{len(peer_rows)} peers matched</b></div>
-                <div class="p-row"><span>Multiples Applied</span><b>EV/EBITDA, EV/EBIT, P/E, P/BV</b></div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
+        with p_col3:
+            st.markdown(f'<div class="pillar-tag pillar-tag-rel"><span>PILLAR 3 · RELATIVE PEER CROSS-CHECK</span><span>{approach_eval["rel_weight"]:.0%} WEIGHT</span></div>', unsafe_allow_html=True)
+            st.metric(
+                "Relative value / share",
+                fmt_idr(rel_price, default="Needs >= 2 peers") if (pd.notna(rel_price) and rel_price > 0) else "Needs >= 2 peers",
+                help="Harmonic or median peer multiple cross-check across eligible IDX-IC sub-industry peer companies.",
+            )
+            st.markdown(
+                f"""<div class="pillar-metrics">
+                    <div class="p-row"><span>Lower Quartile (P25)</span><b>{q25_str}</b></div>
+                    <div class="p-row"><span>Upper Quartile (P75)</span><b>{q75_str}</b></div>
+                    <div class="p-row"><span>Gated Peers</span><b>{len(peer_rows)} peers matched</b></div>
+                    <div class="p-row"><span>Multiples Applied</span><b>EV/EBITDA, EV/EBIT, P/E, P/BV</b></div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
     # 5. Valuation Charts Row (Equal 50:50 Desktop Split)
     ch_left, ch_right = st.columns([1, 1], gap="medium")
