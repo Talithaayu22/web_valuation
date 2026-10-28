@@ -2,7 +2,37 @@
 
 import pandas as pd
 import pytest
-from valuation.ui_table import format_period_header, format_cell_value, render_apple_table
+from valuation.ui_table import (
+    format_period_header,
+    format_cell_value,
+    render_apple_table,
+    parse_mapping_provenance,
+)
+
+
+def test_parse_mapping_provenance():
+    # Direct reported line
+    p_type, p_exp = parse_mapping_provenance("Reported: revenue")
+    assert p_type == "Direct"
+    assert "Revenue" in p_exp
+
+    # Calculated formula line
+    p_type, p_exp = parse_mapping_provenance("Calculated: revenue − COGS − D&A − EBIT")
+    assert p_type == "Calculated"
+    assert "Revenue − (COGS + D&A + EBIT)" in p_exp
+
+    # Complex calculation cleaned up
+    p_type, p_exp = parse_mapping_provenance("Calculated: current assets less cash and marketable securities, receivables and inventory")
+    assert p_type == "Calculated"
+    assert "Current Assets − (Cash + AR + Inv)" in p_exp
+
+    # Override
+    p_type, p_exp = parse_mapping_provenance("Reported: revenue", is_override=True)
+    assert "Override" in p_type
+
+    # Missing
+    p_type, p_exp = parse_mapping_provenance("Missing - enter or explicitly accept zero")
+    assert p_type == "Missing"
 
 
 def test_format_period_header():

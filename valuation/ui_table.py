@@ -28,6 +28,36 @@ def format_period_header(col_key: Any) -> Tuple[str, str]:
     return col_str, ""
 
 
+def parse_mapping_provenance(raw_prov: str, is_override: bool = False) -> Tuple[str, str]:
+    """
+    Parses backend provenance string into a clean (Type, Concise Explanation) tuple.
+    Preserves 100% source traceability while eliminating verbose redundant prefixes.
+    """
+    if is_override:
+        return "⚠️ Override", "Analyst manual adjustment"
+    if not raw_prov or raw_prov == "Illustrative":
+        return "Direct", "Reported financial statement line"
+    raw_str = str(raw_prov).strip()
+    if raw_str.startswith("Reported:"):
+        detail = raw_str.split("Reported:", 1)[1].strip()
+        return "Direct", detail.capitalize() if detail else "Direct statement line"
+    if raw_str.startswith("Calculated:"):
+        detail = raw_str.split("Calculated:", 1)[1].strip()
+        detail = (
+            detail.replace("current assets less cash and marketable securities, receivables and inventory", "Current Assets − (Cash + AR + Inv)")
+            .replace("assets less current assets and PPE", "Total Assets − (Current Assets + PPE)")
+            .replace("current liabilities less payables and short-term debt", "Current Liab − (AP + Short-term Debt)")
+            .replace("revenue − COGS − D&A − EBIT", "Revenue − (COGS + D&A + EBIT)")
+            .replace("liabilities less current liabilities and long-term debt", "Total Liab − (Current Liab + Long-term Debt)")
+        )
+        return "Calculated", detail
+    if "override" in raw_str.lower():
+        return "⚠️ Override", "Analyst manual adjustment"
+    if "missing" in raw_str.lower():
+        return "Missing", "Unpopulated in provider filings"
+    return "Direct", raw_str
+
+
 def format_cell_value(val: Any, num_format: str = "{:,.2f}", na_rep: str = "—") -> Tuple[str, str]:
     """
     Formats an individual cell value and determines its alignment class ('col-num' or 'col-text').

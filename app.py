@@ -20,7 +20,7 @@ for _mod_name in ("valuation.model", "valuation.data", "valuation.report_pdf", "
         except Exception:
             pass
 
-from valuation.ui_table import render_apple_table
+from valuation.ui_table import render_apple_table, parse_mapping_provenance
 
 try:
     from valuation.data import clean_company_name, format_wib_retrieval
@@ -1791,22 +1791,95 @@ with data_tab:
 
     source_base = historical.loc[list(BASE_FIELDS), historical.columns[-1]]
     base_values = saved.get("base", source_base.to_dict())
-    review = pd.DataFrame({
-        "Account": [BASE_FIELDS[k] for k in BASE_FIELDS],
-        "Reported": [source_base[k] for k in BASE_FIELDS],
-        "Value": [base_values.get(k) for k in BASE_FIELDS],
-        "Source": [
-            "User override" if (pd.notna(base_values.get(k)) and pd.notna(source_base[k]) and abs(float(base_values.get(k)) - float(source_base[k])) > 1e-4)
+
+    # Build structured mapping review rows
+    parsed_prov = []
+    type_list = []
+    for k in BASE_FIELDS:
+        is_ov = (
+            pd.notna(base_values.get(k))
+            and pd.notna(source_base[k])
+            and abs(float(base_values.get(k)) - float(source_base[k])) > 1e-4
+        )
+        raw_p = (
+            "User override"
+            if is_ov
             else ("Saved/user input" if saved else c["provenance"].get(f"{period}:{k}", "Illustrative"))
-            for k in BASE_FIELDS
-        ]
-    }, index=list(BASE_FIELDS))
+        )
+        p_type, p_detail = parse_mapping_provenance(raw_p, is_override=is_ov)
+        type_list.append(p_type)
+        parsed_prov.append(p_detail)
+
+    review = pd.DataFrame(
+        {
+            "Key": [k for k in BASE_FIELDS],
+            "Account": [BASE_FIELDS[k] for k in BASE_FIELDS],
+            "Reported": [source_base[k] for k in BASE_FIELDS],
+            "Value": [base_values.get(k) for k in BASE_FIELDS],
+            "Type": type_list,
+            "Source": parsed_prov,
+        },
+        index=list(BASE_FIELDS),
+    )
+
+    direct_count = sum(1 for t in type_list if t == "Direct")
+    calc_count = sum(1 for t in type_list if t == "Calculated")
+    override_count = sum(1 for t in type_list if "Override" in t)
+
     st.markdown("#### Review and Correct Opening Inputs (FY Base Period)")
     st.caption("Edit the 'Model input · IDR bn' column to correct missing or misclassified source items. Original provider figures remain preserved in 'Reported · IDR bn'.")
+    st.markdown(
+        f"""
+        <div class="fin-table-header-bar" style="border-radius: 12px 12px 0 0; margin-top: 10px;">
+            <div class="fin-table-title">Opening Balance Sheet &amp; Operating Mapping · FY{period}</div>
+            <div class="fin-table-unit">
+                {direct_count} Direct · {calc_count} Calculated · {override_count} Override(s) | All figures in IDR billion
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     edited = st.data_editor(
-        review, disabled=["Account", "Reported", "Source"],
-        column_config={"Value": st.column_config.NumberColumn("Model input · IDR bn", format="%.3f"), "Reported": st.column_config.NumberColumn("Reported · IDR bn", format="%.3f")},
-        height=450, width="stretch", key=key("base_editor")
+        review,
+        hide_index=True,
+        disabled=["Key", "Account", "Reported", "Type", "Source"],
+        column_config={
+            "Key": st.column_config.TextColumn(
+                label="Key",
+                help="Standardized technical model account key",
+                width="small",
+            ),
+            "Account": st.column_config.TextColumn(
+                label="Account",
+                help="Financial statement line item",
+                width="medium",
+            ),
+            "Reported": st.column_config.NumberColumn(
+                label="Reported (IDR bn)",
+                help="Audited provider figure sourced directly from annual filings",
+                format="%,.2f",
+                width="small",
+            ),
+            "Value": st.column_config.NumberColumn(
+                label="Model Input (IDR bn)",
+                help="Active base opening figure used by valuation model. Click cell to edit or override.",
+                format="%,.2f",
+                width="small",
+            ),
+            "Type": st.column_config.TextColumn(
+                label="Mapping Type",
+                help="Derivation classification: Direct reported, Calculated residual, or User override",
+                width="small",
+            ),
+            "Source": st.column_config.TextColumn(
+                label="Source / Mapping",
+                help="Taxonomy mapping rule or derivation formula",
+                width="large",
+            ),
+        },
+        height=450,
+        width="stretch",
+        key=key("base_editor"),
     )
     override_accounts = [
         BASE_FIELDS[k] for k in BASE_FIELDS

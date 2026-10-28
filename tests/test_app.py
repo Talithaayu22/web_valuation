@@ -180,3 +180,24 @@ def test_shared_table_design_system_and_historical_statements():
     assert "Comparable Peers Screening &amp; Financial Comparability" in rendered_markdown
     assert "Scenario Valuation Matrix &amp; Operating Case Trajectory" in rendered_markdown
 
+
+def test_opening_inputs_mapping_table_refinement():
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py", default_timeout=30).run()
+    assert not app.exception
+    rendered_markdown = " ".join(x.value for x in app.markdown)
+
+    # 1. Audit header bar for opening mapping
+    assert "Opening Balance Sheet &amp; Operating Mapping" in rendered_markdown
+    assert "Direct" in rendered_markdown
+    assert "Calculated" in rendered_markdown
+
+    # 2. Data editor columns check
+    mapping_dfs = [df.value for df in app.dataframe if "Key" in getattr(df.value, "columns", [])]
+    assert len(mapping_dfs) > 0
+    de_df = mapping_dfs[0]
+    assert list(de_df.columns) == ["Key", "Account", "Reported", "Value", "Type", "Source"]
+    assert "revenue" in list(de_df["Key"])
+    assert "ppe" in list(de_df["Key"])
+    assert "cogs" in list(de_df["Key"])
+    assert "Revenue" in list(de_df["Account"])
+
