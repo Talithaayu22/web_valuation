@@ -950,6 +950,125 @@ button { border-radius: 10px !important; }
     padding-top: 8px;
     border-top: 1px dashed #E5E5EA;
 }
+
+/* --- Overview Key Assumptions & Key Risks Cards --- */
+.ov-card {
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
+    border-radius: 14px;
+    padding: 18px 20px;
+    height: 100%;
+    min-height: 330px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-sizing: border-box;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.ov-card:hover {
+    border-color: #087F69;
+    box-shadow: 0 3px 10px rgba(8, 127, 105, 0.06);
+}
+.ov-card-head {
+    margin-bottom: 10px;
+}
+.ov-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1D1D1F;
+    margin-top: 2px;
+}
+.ov-assump-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 12px;
+}
+.ov-assump-table tr {
+    border-bottom: 1px solid #F2F2F7;
+    height: 32px;
+}
+.ov-assump-table tr:last-child {
+    border-bottom: none;
+}
+.ov-assump-table td.ov-label {
+    font-size: 12px;
+    color: #6E6E73;
+    font-weight: 500;
+    text-align: left;
+    padding: 5px 0;
+}
+.ov-assump-table td.ov-val {
+    font-size: 12px;
+    color: #1D1D1F;
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    padding: 5px 0;
+}
+.ov-risk-list {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-bottom: 12px;
+}
+.ov-risk-item {
+    background: #F9F9FB;
+    border: 1px solid #E5E5EA;
+    border-radius: 10px;
+    padding: 8px 12px;
+    box-sizing: border-box;
+}
+.ov-risk-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+}
+.ov-risk-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #1D1D1F;
+}
+.ov-risk-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.ov-risk-badge-amber { background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; }
+.ov-risk-badge-red { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+.ov-risk-badge-gray { background: #F2F2F7; color: #6E6E73; border: 1px solid #E5E5EA; }
+.ov-risk-desc {
+    font-size: 11.5px;
+    color: #48484A;
+    line-height: 1.35;
+    margin: 0;
+}
+.ov-card-nav {
+    border-top: 1px dashed #E5E5EA;
+    padding-top: 10px;
+    margin-top: auto;
+    display: flex;
+    justify-content: flex-end;
+}
+.ov-nav-link {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #087F69;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    user-select: none;
+}
+.ov-nav-link:hover {
+    text-decoration: underline;
+    color: #065F4E;
+}
 </style>""", unsafe_allow_html=True)
 
 
@@ -2411,49 +2530,174 @@ with overview:
     with ka_col:
         wacc_prov = "User Override" if a.wacc_override is not None else "CAPM + Synthetic Kd"
         st.markdown(
-            f"""<div class="ios-card">
-                <div class="ios-section-label">LEVEL 3 DRIVERS · KEY VALUATION ASSUMPTIONS</div>
-                <div style="font-weight:700; font-size:15px; margin-bottom:8px;">Core Operating &amp; Discount Drivers</div>
-                <div class="pillar-metrics" style="border-top:none; padding-top:0; margin-bottom:6px;">
-                    <div class="p-row"><span>Revenue Growth (Y1–3 &rarr; Y5)</span><b>{a.growth*100:.1f}% &rarr; {a.mature_growth*100:.1f}%</b></div>
-                    <div class="p-row"><span>EBIT Margin (Y1–3 &rarr; Y5)</span><b>{a.ebit_margin*100:.1f}% &rarr; {a.mature_margin*100:.1f}%</b></div>
-                    <div class="p-row"><span>CapEx / Sales &amp; Non-Cash NWC</span><b>{a.capex_pct*100:.1f}% &amp; {(a.nwc_pct or 0.0)*100:.1f}%</b></div>
-                    <div class="p-row"><span>Effective WACC ({wacc_prov})</span><b>{a.wacc*100:.2f}% (Ke {a.cost_of_equity*100:.2f}%)</b></div>
-                    <div class="p-row"><span>Terminal g &amp; Terminal ROIC</span><b>{a.terminal_growth*100:.2f}% &amp; {a.terminal_roic*100:.1f}%</b></div>
-                    <div class="p-row"><span>Approach Weights (DCF / Relative)</span><b>{approach_eval['dcf_weight']:.0%} / {approach_eval['rel_weight']:.0%}</b></div>
+            f"""<div class="ov-card">
+                <div>
+                    <div class="ov-card-head">
+                        <div class="ios-section-label">LEVEL 3 DRIVERS · KEY VALUATION ASSUMPTIONS</div>
+                        <div class="ov-card-title">Core Operating &amp; Discount Drivers</div>
+                    </div>
+                    <table class="ov-assump-table">
+                        <tbody>
+                            <tr>
+                                <td class="ov-label">Revenue Growth (Y1–3 &rarr; Y5)</td>
+                                <td class="ov-val">{a.growth*100:.1f}% &rarr; {a.mature_growth*100:.1f}%</td>
+                            </tr>
+                            <tr>
+                                <td class="ov-label">EBIT Margin (Y1–3 &rarr; Y5)</td>
+                                <td class="ov-val">{a.ebit_margin*100:.1f}% &rarr; {a.mature_margin*100:.1f}%</td>
+                            </tr>
+                            <tr>
+                                <td class="ov-label">CapEx &amp; Non-Cash NWC / Sales</td>
+                                <td class="ov-val">{a.capex_pct*100:.1f}% &amp; {(a.nwc_pct or 0.0)*100:.1f}%</td>
+                            </tr>
+                            <tr>
+                                <td class="ov-label">Effective WACC ({wacc_prov})</td>
+                                <td class="ov-val">{a.wacc*100:.2f}% (Ke: {a.cost_of_equity*100:.2f}%)</td>
+                            </tr>
+                            <tr>
+                                <td class="ov-label">Terminal Growth &amp; Terminal ROIC</td>
+                                <td class="ov-val">{a.terminal_growth*100:.2f}% &amp; {a.terminal_roic*100:.1f}%</td>
+                            </tr>
+                            <tr>
+                                <td class="ov-label">Approach Weights (DCF / Relative)</td>
+                                <td class="ov-val">{approach_eval['dcf_weight']:.0%} / {approach_eval['rel_weight']:.0%}</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-                <div class="pillar-footer">Edit inputs in <b>Valuation Lab &rarr; Valuation assumptions</b> or inspect full table in <b>Analyst review</b>.</div>
+                <div class="ov-card-nav">
+                    <span class="ov-nav-link" id="nav-btn-assumptions" role="button" tabindex="0">
+                        View All Assumptions &rarr;
+                    </span>
+                </div>
             </div>""",
             unsafe_allow_html=True,
         )
     with kr_col:
-        risk_bullets = []
+        candidate_risks = []
         if is_dcf_ineligible:
-            risk_bullets.append(f"<li><b>Solvency Alert (System Fact)</b>: Total debt (Rp {tot_debt:,.1f} bn) exceeds operating EV, resulting in negative intrinsic equity.</li>")
-        if term_share > 0.75:
-            risk_bullets.append(f"<li><b>Terminal Value Concentration (System Fact)</b>: Terminal value represents <b>{term_share:.0%}</b> of Enterprise Value (&gt;75% threshold). High sensitivity to WACC and perpetual growth.</li>")
-        else:
-            risk_bullets.append(f"<li><b>Terminal Value Proportion (System Fact)</b>: Terminal value accounts for <b>{term_share:.0%}</b> of Enterprise Value.</li>")
+            candidate_risks.append({
+                "title": "Solvency Alert",
+                "desc": f"Total debt (Rp {tot_debt:,.1f} bn) exceeds operating EV, resulting in negative intrinsic equity.",
+                "badge_text": "CRITICAL",
+                "badge_class": "ov-risk-badge-red",
+            })
         if funding > 0.01:
-            risk_bullets.append(f"<li><b>Forecast Borrowing Need (System Fact)</b>: 5-year plan requires <b>Rp {funding:,.1f} bn</b> of cumulative new revolver borrowing to maintain minimum cash.</li>")
+            candidate_risks.append({
+                "title": "Forecast Borrowing Need",
+                "desc": f"5-year plan requires Rp {funding:,.1f} bn of cumulative new borrowing to sustain minimum cash buffer.",
+                "badge_text": "WATCH",
+                "badge_class": "ov-risk-badge-amber",
+            })
+        if term_share > 0.75:
+            candidate_risks.append({
+                "title": "Terminal Value Exposure",
+                "desc": f"{term_share:.0%} of Enterprise Value rests on terminal perpetuity (>75% high sensitivity threshold).",
+                "badge_text": "HIGH",
+                "badge_class": "ov-risk-badge-amber",
+            })
+        else:
+            candidate_risks.append({
+                "title": "Terminal Value Exposure",
+                "desc": f"{term_share:.0%} of Enterprise Value is derived from terminal perpetuity.",
+                "badge_text": "NORMAL",
+                "badge_class": "ov-risk-badge-gray",
+            })
         if len(peer_rows) < 2:
-            risk_bullets.append(f"<li><b>Peer Sample Limitation (System Fact)</b>: Only {len(peer_rows)} active peer(s) verified; Relative Valuation is gated off (100% DCF weight).</li>")
+            candidate_risks.append({
+                "title": "Peer Sample Limitation",
+                "desc": f"Only {len(peer_rows)} active peer(s) verified; Relative Valuation is gated off (100% DCF weight).",
+                "badge_text": "LIMITED",
+                "badge_class": "ov-risk-badge-amber",
+            })
         if statement_age_days > 550:
-            risk_bullets.append(f"<li><b>Stale Reporting Period (System Fact)</b>: Latest audited period ({period}) is {statement_age_days} days old (&gt;18 months).</li>")
-        risk_bullets.append(f"<li><b>FY2025 Baseline Anchor (Limitation &amp; Risk)</b>: Model forecasts extrapolate from audited FY{period} figures as the starting baseline; subsequent interim performance, working-capital swings, and post-FY2025 corporate announcements are not reflected in historical base inputs.</li>")
-        risk_bullets.append(f"<li><b>Macro &amp; Cost of Capital Sensitivity</b>: Valued at Indonesia CRP ({a.country_risk_premium*100:.2f}%), Rf ({a.risk_free*100:.2f}%), and Beta ({a.beta:.2f}).</li>")
-        risk_html_list = "".join(risk_bullets[:4])
+            candidate_risks.append({
+                "title": "Stale Reporting Period",
+                "desc": f"Latest audited period ({period}) is {statement_age_days} days old (>18 months coverage threshold).",
+                "badge_text": "STALE",
+                "badge_class": "ov-risk-badge-amber",
+            })
+        candidate_risks.append({
+            "title": "Historical Data Baseline",
+            "desc": f"Forecast extrapolates from audited FY{period} figures without interim stub or post-FY{period} event adjustments.",
+            "badge_text": "BASELINE",
+            "badge_class": "ov-risk-badge-gray",
+        })
+        candidate_risks.append({
+            "title": "Cost of Capital Sensitivity",
+            "desc": f"Valuation is sensitive to Indo 10Y Rf ({a.risk_free*100:.2f}%), Beta ({a.beta:.2f}), and CRP ({a.country_risk_premium*100:.2f}%).",
+            "badge_text": "MACRO",
+            "badge_class": "ov-risk-badge-gray",
+        })
+
+        top_risks = candidate_risks[:3]
+        risk_items_html = []
+        for rk in top_risks:
+            risk_items_html.append(
+                f"""<div class="ov-risk-item">
+                    <div class="ov-risk-header">
+                        <span class="ov-risk-title">{rk['title']}</span>
+                        <span class="ov-risk-badge {rk['badge_class']}">{rk['badge_text']}</span>
+                    </div>
+                    <p class="ov-risk-desc">{rk['desc']}</p>
+                </div>"""
+            )
+        risk_html_content = "\n".join(risk_items_html)
+
         st.markdown(
-            f"""<div class="ios-card">
-                <div class="ios-section-label">LEVEL 3 &amp; 4 · KEY RISKS &amp; MODEL LIMITATIONS</div>
-                <div style="font-weight:700; font-size:15px; margin-bottom:8px;">Material Risks &amp; Active Model Boundaries</div>
-                <ul style="margin:0 0 8px 16px; padding:0; font-size:12.5px; color:#1D1D1F; line-height:1.5;">
-                    {risk_html_list}
-                </ul>
-                <div class="pillar-footer">Review complete 4-panel risk, limitation &amp; validation audit in <b>Valuation Lab &rarr; Analyst review</b>.</div>
+            f"""<div class="ov-card">
+                <div>
+                    <div class="ov-card-head">
+                        <div class="ios-section-label">LEVEL 3 &amp; 4 · KEY RISKS &amp; MODEL LIMITATIONS</div>
+                        <div class="ov-card-title">Material Risks &amp; Active Model Boundaries</div>
+                    </div>
+                    <div class="ov-risk-list">
+                        {risk_html_content}
+                    </div>
+                </div>
+                <div class="ov-card-nav">
+                    <span class="ov-nav-link" id="nav-btn-risks" role="button" tabindex="0">
+                        View All Risks &amp; Audits &rarr;
+                    </span>
+                </div>
             </div>""",
             unsafe_allow_html=True,
         )
+
+    # Client-side tab navigation handler for Overview Level 3 cards
+    components.html(
+        """
+        <script>
+            (function() {
+                const parentDoc = window.parent.document;
+                if (!parentDoc._overviewNavBound) {
+                    parentDoc._overviewNavBound = true;
+                    parentDoc.addEventListener('click', (e) => {
+                        const assumpBtn = e.target.closest('#nav-btn-assumptions');
+                        const riskBtn = e.target.closest('#nav-btn-risks');
+                        if (assumpBtn || riskBtn) {
+                            const tabs = Array.from(parentDoc.querySelectorAll('button[data-testid="stTab"], [role="tab"]'));
+                            const labTab = tabs.find(t => t.innerText && t.innerText.includes("Valuation Lab"));
+                            if (labTab) {
+                                labTab.click();
+                                setTimeout(() => {
+                                    const subTabs = Array.from(parentDoc.querySelectorAll('button[data-testid="stTab"], [role="tab"]'));
+                                    const targetName = assumpBtn ? "Valuation assumptions" : "Analyst review";
+                                    const subTarget = subTabs.find(t => t.innerText && t.innerText.includes(targetName));
+                                    if (subTarget) {
+                                        subTarget.click();
+                                    }
+                                }, 80);
+                            }
+                        }
+                    }, true);
+                }
+            })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
     # 7. Collapsible Evidence & Method Details (Level 5 — Detail on Demand)
     with st.expander("Valuation Approach Selection & Weight Justification (Rule 1 & Rule 2)", expanded=False):

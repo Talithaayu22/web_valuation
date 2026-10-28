@@ -1220,3 +1220,26 @@ def test_damodaran_cost_of_debt_floor_enforcement():
     }
     a_dom = infer_assumptions(h, b_domestic, co)
     assert a_dom.debt_rate == pytest.approx(0.0850)
+
+
+def test_damodaran_plantations_and_crops_cyclical_detection():
+    # Cyclical Plantation company with trough revenue (CAGR ~ 0.17%)
+    h = pd.DataFrame({
+        "2022-12-31": {"revenue": 10000.0, "capex": 500.0, "cogs": 7000.0, "opex": 500.0, "da": 300.0},
+        "2023-12-31": {"revenue": 9500.0, "capex": 500.0, "cogs": 6800.0, "opex": 500.0, "da": 300.0},
+        "2024-12-31": {"revenue": 9800.0, "capex": 500.0, "cogs": 6900.0, "opex": 500.0, "da": 300.0},
+        "2025-12-31": {"revenue": 10050.0, "capex": 500.0, "cogs": 7000.0, "opex": 500.0, "da": 300.0},
+    })
+    b = {"revenue": 10050.0, "cogs": 7000.0, "opex": 500.0, "da": 300.0, "ppe": 5000.0}
+
+    # 1. Plantation issuer under Consumer Non-Cyclicals -> detected as cyclical and normalized to 3.5%
+    plantation_co = {"symbol": "TAPG.JK", "sector": "Consumer Non-Cyclicals", "industry": "Plantations & Crops"}
+    a_plantation = infer_assumptions(h, b, plantation_co)
+    assert a_plantation.growth == pytest.approx(0.035)
+
+    # 2. Processed Foods under Consumer Non-Cyclicals -> NOT detected as cyclical, exact historical CAGR preserved
+    food_co = {"symbol": "ICBP.JK", "sector": "Consumer Non-Cyclicals", "industry": "Processed Foods"}
+    a_food = infer_assumptions(h, b, food_co)
+    cagr = (10050.0 / 10000.0)**(1/3) - 1.0
+    assert a_food.growth == pytest.approx(cagr)
+    assert a_food.growth < 0.01

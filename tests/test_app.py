@@ -119,3 +119,33 @@ def test_dcf_and_relative_valuation_tab_ui_refinements():
     assert "(\\text{ROIC}" not in rendered_markdown
     assert "($\\text{ROIC}" not in rendered_markdown
 
+
+def test_overview_assumptions_and_risks_cards_refinement():
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py", default_timeout=30).run()
+    assert not app.exception
+    rendered_markdown = " ".join(x.value for x in app.markdown)
+
+    # 1. Verify card containers and labels
+    assert "ov-card" in rendered_markdown
+    assert "LEVEL 3 DRIVERS · KEY VALUATION ASSUMPTIONS" in rendered_markdown
+    assert "Core Operating &amp; Discount Drivers" in rendered_markdown
+    assert "LEVEL 3 &amp; 4 · KEY RISKS &amp; MODEL LIMITATIONS" in rendered_markdown
+    assert "Material Risks &amp; Active Model Boundaries" in rendered_markdown
+
+    # 2. Verify Key Assumptions table structure and metrics
+    assert "ov-assump-table" in rendered_markdown
+    assert "Revenue Growth (Y1–3 &rarr; Y5)" in rendered_markdown
+    assert "EBIT Margin (Y1–3 &rarr; Y5)" in rendered_markdown
+    assert "CapEx &amp; Non-Cash NWC / Sales" in rendered_markdown
+    assert "Effective WACC" in rendered_markdown
+    assert "Terminal Growth &amp; Terminal ROIC" in rendered_markdown
+    assert "Approach Weights (DCF / Relative)" in rendered_markdown
+    assert "View All Assumptions &rarr;" in rendered_markdown
+
+    # 3. Verify Key Risks structured list and items
+    assert "ov-risk-list" in rendered_markdown
+    assert "ov-risk-item" in rendered_markdown
+    assert "ov-risk-badge" in rendered_markdown
+    assert "Terminal Value Exposure" in rendered_markdown
+    assert "View All Risks &amp; Audits &rarr;" in rendered_markdown
+
