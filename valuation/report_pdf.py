@@ -67,6 +67,7 @@ def create_price_target_line_chart(
     width_pt=530,
     height_pt=145,
     dpi=300,
+    reference_dt=None,
 ):
     """Generates an institutional equity research price chart with fanning scenario target callouts
     (inspired by Figure 1 in institutional equity research memos).
@@ -94,7 +95,11 @@ def create_price_target_line_chart(
         cur_p = _finite_or(market_price, 2000.0)
         if cur_p <= 0:
             cur_p = 2000.0
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        ref_dt = reference_dt if isinstance(reference_dt, datetime) else datetime.now(timezone.utc)
+        if ref_dt.tzinfo is not None:
+            now = ref_dt.astimezone(timezone.utc).replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            now = ref_dt.replace(hour=0, minute=0, second=0, microsecond=0)
         d_idx = pd.date_range(end=now, periods=126, freq="B")
         rng = np.random.RandomState(42)
         shocks = rng.normal(0.0002, 0.012, len(d_idx))
@@ -351,6 +356,7 @@ def generate_valuation_pdf(
     approach_eval=None,
     peer_rows=None,
     analyst_name="Equity Research Team",
+    generated_at=None,
 ) -> bytes:
     """Compiles the complete 2-page publication-grade institutional valuation PDF report."""
     buf = io.BytesIO()
@@ -361,6 +367,7 @@ def generate_valuation_pdf(
         rightMargin=32,
         topMargin=24,
         bottomMargin=24,
+        invariant=1,
     )
     styles = getSampleStyleSheet()
 
@@ -415,9 +422,12 @@ def generate_valuation_pdf(
     # =========================================================================
 
     # 1. Clean 2-Zone Header & Timestamps
+    export_dt = generated_at if isinstance(generated_at, datetime) else datetime.now(timezone.utc)
+    if export_dt.tzinfo is None:
+        export_dt = export_dt.replace(tzinfo=timezone.utc)
     obs_date_full, obs_date_short = format_wib_retrieval(c.get("fetched_at"))
-    export_time_full, _ = format_wib_retrieval(datetime.now(timezone.utc))
-    val_date_str = datetime.now(timezone.utc).strftime("%d %b %Y")
+    export_time_full, _ = format_wib_retrieval(export_dt)
+    val_date_str = export_dt.strftime("%d %b %Y")
 
     top_row = [
         [
@@ -496,6 +506,7 @@ def generate_valuation_pdf(
         width_pt=530,
         height_pt=140,
         dpi=300,
+        reference_dt=export_dt,
     )
     story.append(chart_flowable)
     story.append(Spacer(1, 5))

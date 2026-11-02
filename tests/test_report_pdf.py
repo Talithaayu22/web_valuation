@@ -193,3 +193,57 @@ def test_generate_valuation_pdf_vector_fallback_when_matplotlib_absent(monkeypat
     assert pdf_bytes.startswith(b"%PDF-1.4")
     assert pdf_bytes.rstrip().endswith(b"%%EOF")
     assert len(re.findall(rb'/Type\s*/Page\b', pdf_bytes)) == 2
+
+
+def test_generate_valuation_pdf_deterministic_bytes_and_streamlit_file_id():
+    from datetime import datetime, timezone
+    from streamlit.runtime.memory_media_file_storage import _calculate_file_id
+
+    fixed_dt = datetime(2026, 11, 2, 15, 30, 0, tzinfo=timezone.utc)
+    company = {
+        "symbol": "TLKM.JK",
+        "name": "PT Telkom Indonesia Tbk",
+        "sector": "Infrastructures",
+        "industry": "Integrated Telecommunication Service",
+        "price": 1960.0,
+        "fetched_at": "2026-11-02T15:00:00Z",
+    }
+    assumptions = Assumptions()
+    dcf_result = {"price": 2451.0, "equity_value": 242000.0}
+    scenarios = [
+        {"Scenario": "Bear", "Probability": 0.25, "Value / share": 1809.0},
+        {"Scenario": "Base", "Probability": 0.50, "Value / share": 2451.0},
+        {"Scenario": "Bull", "Probability": 0.25, "Value / share": 3370.0},
+    ]
+
+    pdf_1 = generate_valuation_pdf(
+        company=company,
+        assumptions=assumptions,
+        dcf_result=dcf_result,
+        scenario_rows=scenarios,
+        effective_price=2451.0,
+        generated_at=fixed_dt,
+    )
+    pdf_2 = generate_valuation_pdf(
+        company=company,
+        assumptions=assumptions,
+        dcf_result=dcf_result,
+        scenario_rows=scenarios,
+        effective_price=2451.0,
+        generated_at=fixed_dt,
+    )
+    assert pdf_1 == pdf_2
+    id_1 = _calculate_file_id(pdf_1, "application/pdf", "TLKM_Valuation_Report.pdf")
+    id_2 = _calculate_file_id(pdf_2, "application/pdf", "TLKM_Valuation_Report.pdf")
+    assert id_1 == id_2
+
+    pdf_changed = generate_valuation_pdf(
+        company=company,
+        assumptions=assumptions,
+        dcf_result={"price": 2750.0, "equity_value": 272000.0},
+        scenario_rows=scenarios,
+        effective_price=2750.0,
+        generated_at=fixed_dt,
+    )
+    assert pdf_changed != pdf_1
+

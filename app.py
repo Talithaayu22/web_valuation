@@ -1,6 +1,7 @@
 from dataclasses import asdict, replace
 from datetime import datetime, timezone, timedelta
 from html import escape
+import hashlib
 import importlib
 import json
 import logging
@@ -2824,11 +2825,105 @@ fair_value_low = min(range_candidates) if range_candidates else None
 fair_value_high = max(range_candidates) if range_candidates else None
 fair_value_range_str = f"Rp {fair_value_low:,.0f} – Rp {fair_value_high:,.0f}" if (fair_value_low and fair_value_high) else "Not available"
 
-# Pre-build PDF and Excel bytes independently for reuse across Overview and Research Report
+def _normalize_for_export_fingerprint(val: Any) -> Any:
+    if val is None or isinstance(val, (bool, int, str)):
+        return val
+    if isinstance(val, float):
+        if math.isnan(val):
+            return "__nan__"
+        if math.isinf(val):
+            return "__inf__" if val > 0 else "__-inf__"
+        return round(val, 10)
+    if hasattr(val, "item") and callable(getattr(val, "item", None)):
+        try:
+            return _normalize_for_export_fingerprint(val.item())
+        except Exception:
+            return str(val)
+    if isinstance(val, pd.DataFrame):
+        return {
+            "__df__": True,
+            "index": [str(x) for x in val.index],
+            "columns": [str(x) for x in val.columns],
+            "data": [[_normalize_for_export_fingerprint(v) for v in row] for row in val.to_numpy().tolist()],
+        }
+    if isinstance(val, pd.Series):
+        return {
+            "__series__": True,
+            "index": [str(x) for x in val.index],
+            "data": [_normalize_for_export_fingerprint(v) for v in val.to_numpy().tolist()],
+        }
+    if isinstance(val, dict):
+        return {str(k): _normalize_for_export_fingerprint(v) for k, v in sorted(val.items(), key=lambda kv: str(kv[0]))}
+    if isinstance(val, (list, tuple)):
+        return [_normalize_for_export_fingerprint(v) for v in val]
+    return str(val)
+
+
+def _compute_export_fingerprint() -> str:
+    ph_obj = c.get("price_history") if isinstance(c, dict) else None
+    ph_sig = None
+    if isinstance(ph_obj, (pd.Series, pd.DataFrame)) and not ph_obj.empty:
+        ph_sig = {"len": int(len(ph_obj)), "tail": ph_obj.tail(10)}
+    payload = {
+        "company_meta": {
+            "symbol": c.get("symbol"),
+            "name": c.get("name"),
+            "sector": c.get("sector"),
+            "industry": c.get("industry"),
+            "fetched_at": c.get("fetched_at"),
+            "financial_currency": c.get("financial_currency"),
+            "demo": c.get("demo"),
+            "price": c.get("price"),
+            "shares": c.get("shares"),
+        },
+        "price_history_sig": ph_sig,
+        "period": period,
+        "price": price,
+        "shares": shares,
+        "fx": fx,
+        "historical": historical,
+        "base": b,
+        "assumptions": asdict(a),
+        "drivers": drivers,
+        "result": result,
+        "scenario_rows": scenario_rows,
+        "peer_rows": peer_rows,
+        "relative": relative,
+        "rel_breakdown": rel_breakdown,
+        "mult_weights_norm": mult_weights_norm,
+        "rel_agg_choice": rel_agg_choice,
+        "expected_dcf_price": expected_dcf_price,
+        "rel_price": rel_price,
+        "blended_price": blended_price,
+        "effective_price": effective_price,
+        "rec": rec,
+        "approach_eval": approach_eval,
+        "pdf_gen_qualname": (
+            f"{getattr(generate_valuation_pdf, '__module__', '')}.{getattr(generate_valuation_pdf, '__qualname__', '')}"
+            if generate_valuation_pdf is not None
+            else None
+        ),
+        "xl_gen_qualname": f"{getattr(workbook, '__module__', '')}.{getattr(workbook, '__qualname__', '')}",
+    }
+    encoded = json.dumps(_normalize_for_export_fingerprint(payload), sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+# Pre-build and deterministically cache PDF and Excel bytes by canonical valuation fingerprint
+# so Streamlit's MemoryMediaFileStorage retains a stable 32-hex file_id across reruns.
 pdf_report_bytes = None
 pdf_export_error = None
 excel_bytes = None
 excel_export_error = None
+
+_export_fp = _compute_export_fingerprint()
+_cached_export_bundle = st.session_state.get("_export_bundle_cache")
+_cache_fp_match = isinstance(_cached_export_bundle, dict) and _cached_export_bundle.get("fingerprint") == _export_fp
+_export_generated_at = (
+    _cached_export_bundle["generated_at"]
+    if (_cache_fp_match and isinstance(_cached_export_bundle.get("generated_at"), datetime))
+    else datetime.now(timezone.utc)
+)
 
 if generate_valuation_pdf is None:
     pdf_export_error = (
@@ -2838,6 +2933,8 @@ if generate_valuation_pdf is None:
     )
 elif not result:
     pdf_export_error = "PDF report unavailable: Complete valid DCF assumptions to generate the report."
+elif _cache_fp_match and isinstance(_cached_export_bundle.get("pdf_bytes"), bytes) and len(_cached_export_bundle["pdf_bytes"]) > 0:
+    pdf_report_bytes = _cached_export_bundle["pdf_bytes"]
 else:
     try:
         pdf_report_bytes = generate_valuation_pdf(
@@ -2854,6 +2951,7 @@ else:
             rec=rec,
             approach_eval=approach_eval,
             peer_rows=peer_rows,
+            generated_at=_export_generated_at,
         )
         if not pdf_report_bytes:
             pdf_report_bytes = None
@@ -2865,6 +2963,8 @@ else:
 
 if not result:
     excel_export_error = "Excel export unavailable: Complete valid DCF assumptions to generate the workbook."
+elif _cache_fp_match and isinstance(_cached_export_bundle.get("excel_bytes"), bytes) and len(_cached_export_bundle["excel_bytes"]) > 0:
+    excel_bytes = _cached_export_bundle["excel_bytes"]
 else:
     try:
         excel_bytes = workbook(
@@ -2894,6 +2994,12 @@ else:
         excel_bytes = None
         excel_export_error = f"Excel export could not be generated ({type(_xl_gen_exc).__name__}: {_xl_gen_exc})."
 
+st.session_state["_export_bundle_cache"] = {
+    "fingerprint": _export_fp,
+    "generated_at": _export_generated_at,
+    "pdf_bytes": pdf_report_bytes,
+    "excel_bytes": excel_bytes,
+}
 st.session_state["_latest_pdf_bytes"] = pdf_report_bytes
 st.session_state["_latest_excel_bytes"] = excel_bytes
 st.session_state["_latest_pdf_error"] = pdf_export_error
@@ -2943,7 +3049,6 @@ with overview:
                     key=key("dl_pdf_banner"),
                     type="primary",
                     use_container_width=True,
-                    on_click="ignore",
                 )
             elif pdf_export_error:
                 st.error(pdf_export_error)
@@ -2956,7 +3061,6 @@ with overview:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key=key("dl_excel_banner"),
                     use_container_width=True,
-                    on_click="ignore",
                 )
             elif excel_export_error:
                 st.error(excel_export_error)
@@ -4578,7 +4682,6 @@ with report_tab:
                     mime="application/pdf",
                     type="primary",
                     use_container_width=True,
-                    on_click="ignore",
                     key=key("dl_pdf_report_tab"),
                 )
             elif pdf_export_error:
@@ -4591,7 +4694,6 @@ with report_tab:
                     file_name=f"{clean_sym}_Valuation_Dashboard.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
-                    on_click="ignore",
                     key=key("dl_xlsx_report_tab"),
                 )
             elif excel_export_error:
@@ -4779,27 +4881,8 @@ with st.sidebar:
             st.success("Saved on this PC. Open it under Saved analyses.")
         except (ValueError, TypeError) as exc:
             st.error(f"Could not save: {exc}")
-    if result:
-        download = workbook(
-            company=c,
-            historical=historical,
-            base=b,
-            assumptions=a,
-            drivers=drivers,
-            forecast=f,
-            result=result,
-            grid=grid,
-            peers=peer_rows,
-            relative=relative,
-            expected_dcf_price=expected_dcf_price,
-            rel_price=rel_price,
-            blended_price=blended_price,
-            rec=rec,
-            scenario_rows=scenario_rows,
-            mult_weights=mult_weights_norm,
-            rel_breakdown=rel_breakdown,
-        )
-        st.download_button("Export Excel snapshot", download, file_name=f"{c['symbol']}_valuation.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
+    if excel_bytes is not None:
+        st.download_button("Export Excel snapshot", excel_bytes, file_name=f"{c['symbol']}_valuation.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
     st.caption("Refresh data")
     if st.button("Clear cached Yahoo data", width="stretch"):
         get_company.clear()

@@ -252,7 +252,40 @@ def test_overview_pdf_and_excel_exports_visible_and_update_with_assumptions():
     wb_init = openpyxl.load_workbook(io.BytesIO(xl_bytes_initial), data_only=False)
     assert len(wb_init.sheetnames) >= 5
 
-    # 3. Update assumptions -> verify both exports refresh dynamically with no stale values
+    # 3. Draft slider/input edits (before Apply) and repeated reruns must preserve
+    #    100% byte-identical exports so Streamlit's 32-hex media file_id never churns or 404s.
+    from streamlit.runtime.memory_media_file_storage import _calculate_file_id
+
+    sym_clean = app.session_state.company["symbol"].replace(".JK", "")
+    pdf_fname = f"{sym_clean}_Valuation_Report.pdf"
+    xl_fname = f"{sym_clean}_Valuation.xlsx"
+    pdf_id_initial = _calculate_file_id(pdf_bytes_initial, "application/pdf", pdf_fname)
+    xl_id_initial = _calculate_file_id(
+        xl_bytes_initial,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        xl_fname,
+    )
+    assert pdf_btn.proto.ignore_rerun is False
+    assert xl_btn.proto.ignore_rerun is False
+
+    # Trigger consecutive reruns (including clicking the download button itself)
+    # without changing valuation inputs: bytes and 32-hex file_id MUST stay 100% identical.
+    app.run()
+    assert not app.exception
+    pdf_btn_after = next(b for b in app.download_button if b.key and b.key.endswith("_dl_pdf_banner"))
+    pdf_btn_after.click().run()
+    assert not app.exception
+
+    assert app.session_state["_latest_pdf_bytes"] == pdf_bytes_initial
+    assert app.session_state["_latest_excel_bytes"] == xl_bytes_initial
+    assert _calculate_file_id(app.session_state["_latest_pdf_bytes"], "application/pdf", pdf_fname) == pdf_id_initial
+    assert _calculate_file_id(
+        app.session_state["_latest_excel_bytes"],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        xl_fname,
+    ) == xl_id_initial
+
+    # 4. Update & Apply assumptions -> verify both exports refresh dynamically with no stale values
     growth_input = next(n for n in app.number_input if n.label == "Growth · years 1–3 (%)")
     growth_input.set_value(14.0)
     next(b for b in app.button if b.label == "Apply assumptions").click().run()
