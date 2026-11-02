@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from html import escape
 import importlib
 import json
+import logging
 import math
 import re
 import sys
@@ -12,13 +13,15 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Explicitly reload valuation submodules to prevent stale sys.modules caching in Streamlit
-for _mod_name in ("valuation.model", "valuation.data", "valuation.report_pdf", "valuation.export", "valuation.storage", "valuation.ui_table"):
+logger = logging.getLogger(__name__)
+
+# Explicitly reload lightweight valuation submodules to prevent stale sys.modules caching in Streamlit
+for _mod_name in ("valuation.model", "valuation.data", "valuation.export", "valuation.storage", "valuation.ui_table"):
     if _mod_name in sys.modules:
         try:
             importlib.reload(sys.modules[_mod_name])
-        except Exception:
-            pass
+        except Exception as _reload_exc:
+            logger.debug("Submodule reload skipped for %s: %s", _mod_name, _reload_exc)
 
 from valuation.ui_table import render_apple_table, parse_mapping_provenance
 
@@ -72,10 +75,13 @@ except ImportError:
                 errors.append(f"{t}: {e}")
         return results, errors
 
+pdf_import_error = None
 try:
     from valuation.report_pdf import generate_valuation_pdf
-except ImportError:
+except Exception as _pdf_imp_exc:
+    logger.exception("Failed to import generate_valuation_pdf from valuation.report_pdf")
     generate_valuation_pdf = None
+    pdf_import_error = f"{type(_pdf_imp_exc).__name__}: {_pdf_imp_exc}"
 
 from valuation.model import (
     get_multiple_exclusion_details,
@@ -460,6 +466,27 @@ div:has(> .st-key-main_nav_container) > div[data-testid="stTabs"] button[data-ba
 .hero p { color: #6E6E73; margin: 0; font-size: 0.92rem; }
 .small { color: #6E6E73; font-size: 12px; }
 button { border-radius: 10px !important; }
+
+/* Overview Export Action Stack (Symmetrical Equal-Width Download Buttons) */
+.st-key-overview_export_stack {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+}
+.st-key-overview_export_stack [data-testid="stDownloadButton"] {
+    width: 100% !important;
+    margin: 0 !important;
+}
+.st-key-overview_export_stack [data-testid="stDownloadButton"] button {
+    width: 100% !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.01em !important;
+    border-radius: 10px !important;
+}
 
 /* Model Audit & Sanity Check Strip */
 .model-audit-strip {
@@ -1555,10 +1582,13 @@ def unpack_company(c):
     out["raw"] = {name: pd.read_json(StringIO(data), orient="split", convert_axes=False) for name, data in c.get("raw", {}).items()}
     if "price_history" in c and isinstance(c["price_history"], str):
         try:
-            ph = pd.read_json(StringIO(c["price_history"]), orient="split")
-            out["price_history"] = ph.squeeze("columns") if isinstance(ph, pd.DataFrame) and ph.shape[1] == 1 else ph
+            out["price_history"] = pd.read_json(StringIO(c["price_history"]), typ="series", orient="split")
         except Exception:
-            out["price_history"] = None
+            try:
+                ph = pd.read_json(StringIO(c["price_history"]), orient="split")
+                out["price_history"] = ph.squeeze("columns") if isinstance(ph, pd.DataFrame) and ph.shape[1] == 1 else ph
+            except Exception:
+                out["price_history"] = None
     return out
 
 
@@ -2794,11 +2824,22 @@ fair_value_low = min(range_candidates) if range_candidates else None
 fair_value_high = max(range_candidates) if range_candidates else None
 fair_value_range_str = f"Rp {fair_value_low:,.0f} – Rp {fair_value_high:,.0f}" if (fair_value_low and fair_value_high) else "Not available"
 
-# Pre-build PDF and Excel bytes once for reuse across Overview, Research Report, and Sidebar
+# Pre-build PDF and Excel bytes independently for reuse across Overview and Research Report
 pdf_report_bytes = None
+pdf_export_error = None
 excel_bytes = None
-try:
-    if generate_valuation_pdf is not None:
+excel_export_error = None
+
+if generate_valuation_pdf is None:
+    pdf_export_error = (
+        f"PDF report unavailable: PDF generator failed to load ({pdf_import_error})."
+        if pdf_import_error
+        else "PDF report unavailable: PDF generator module could not be loaded."
+    )
+elif not result:
+    pdf_export_error = "PDF report unavailable: Complete valid DCF assumptions to generate the report."
+else:
+    try:
         pdf_report_bytes = generate_valuation_pdf(
             company=c,
             assumptions=a,
@@ -2814,7 +2855,18 @@ try:
             approach_eval=approach_eval,
             peer_rows=peer_rows,
         )
-    if result:
+        if not pdf_report_bytes:
+            pdf_report_bytes = None
+            pdf_export_error = "PDF report unavailable: Generator returned an empty document."
+    except Exception as _pdf_gen_exc:
+        logger.exception("PDF report generation failed for %s", c.get("symbol"))
+        pdf_report_bytes = None
+        pdf_export_error = f"PDF report could not be generated ({type(_pdf_gen_exc).__name__}: {_pdf_gen_exc})."
+
+if not result:
+    excel_export_error = "Excel export unavailable: Complete valid DCF assumptions to generate the workbook."
+else:
+    try:
         excel_bytes = workbook(
             company=c,
             historical=historical,
@@ -2834,8 +2886,18 @@ try:
             mult_weights=mult_weights_norm,
             rel_breakdown=rel_breakdown,
         )
-except Exception as _export_prep_err:
-    pass
+        if not excel_bytes:
+            excel_bytes = None
+            excel_export_error = "Excel export unavailable: Workbook generator returned empty bytes."
+    except Exception as _xl_gen_exc:
+        logger.exception("Excel workbook generation failed for %s", c.get("symbol"))
+        excel_bytes = None
+        excel_export_error = f"Excel export could not be generated ({type(_xl_gen_exc).__name__}: {_xl_gen_exc})."
+
+st.session_state["_latest_pdf_bytes"] = pdf_report_bytes
+st.session_state["_latest_excel_bytes"] = excel_bytes
+st.session_state["_latest_pdf_error"] = pdf_export_error
+st.session_state["_latest_excel_error"] = excel_export_error
 
 with overview:
     st.markdown(
@@ -2871,25 +2933,33 @@ with overview:
             unsafe_allow_html=True,
         )
     with dl_col:
-        if pdf_report_bytes is not None:
-            st.download_button(
-                label="Download PDF Report",
-                data=pdf_report_bytes,
-                file_name=f"{c['symbol'].replace('.JK', '')}_Valuation_Report.pdf",
-                mime="application/pdf",
-                key=key("dl_pdf_banner"),
-                type="primary",
-                use_container_width=True,
-            )
-        if excel_bytes is not None:
-            st.download_button(
-                label="Export Excel (.xlsx)",
-                data=excel_bytes,
-                file_name=f"{c['symbol'].replace('.JK', '')}_Valuation.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key=key("dl_excel_banner"),
-                use_container_width=True,
-            )
+        with st.container(key="overview_export_stack"):
+            if pdf_report_bytes is not None:
+                st.download_button(
+                    label="Download PDF Report",
+                    data=pdf_report_bytes,
+                    file_name=f"{c['symbol'].replace('.JK', '')}_Valuation_Report.pdf",
+                    mime="application/pdf",
+                    key=key("dl_pdf_banner"),
+                    type="primary",
+                    use_container_width=True,
+                    on_click="ignore",
+                )
+            elif pdf_export_error:
+                st.error(pdf_export_error)
+
+            if excel_bytes is not None:
+                st.download_button(
+                    label="Export Excel (.xlsx)",
+                    data=excel_bytes,
+                    file_name=f"{c['symbol'].replace('.JK', '')}_Valuation.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=key("dl_excel_banner"),
+                    use_container_width=True,
+                    on_click="ignore",
+                )
+            elif excel_export_error:
+                st.error(excel_export_error)
 
     if is_dcf_ineligible:
         ev_val = result.get("enterprise_value", 0.0) if result else 0.0
@@ -4511,6 +4581,8 @@ with report_tab:
                     on_click="ignore",
                     key=key("dl_pdf_report_tab"),
                 )
+            elif pdf_export_error:
+                st.error(pdf_export_error)
         with rep_exp_col2:
             if excel_bytes is not None:
                 st.download_button(
@@ -4522,6 +4594,8 @@ with report_tab:
                     on_click="ignore",
                     key=key("dl_xlsx_report_tab"),
                 )
+            elif excel_export_error:
+                st.error(excel_export_error)
     else:
         st.warning("Complete DCF valuation inputs to enable PDF and Excel exports.")
 

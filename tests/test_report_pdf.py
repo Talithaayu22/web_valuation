@@ -117,3 +117,79 @@ def test_generate_valuation_pdf_page_budget_exact_2_pages():
     page_count = len(re.findall(rb'/Type\s*/Page\b', pdf_bytes))
     assert page_count == 2
     assert len(pdf_bytes) > 20000
+
+
+def test_pdf_dependencies_declared_in_requirements():
+    from pathlib import Path
+    req_text = (Path(__file__).resolve().parents[1] / "requirements.txt").read_text(encoding="utf-8").lower()
+    assert "reportlab" in req_text
+    assert "matplotlib" in req_text
+    assert "pillow" in req_text
+
+
+def test_generate_valuation_pdf_nan_scenarios_xml_chars_and_string_dates():
+    import re
+    import pandas as pd
+    ph = pd.Series(
+        [2100.0, float("nan"), 2150.0, 2070.0],
+        index=["2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z", "2026-09-01T00:00:00.000Z", "2026-10-01T00:00:00.000Z"],
+        name="Close",
+    )
+    company = {
+        "symbol": "TLKM.JK",
+        "name": "PT Telkom <Indonesia> & Subsidiaries",
+        "sector": "Infrastructures & Telecom",
+        "industry": "Integrated Telecom <Wireless & Fiber>",
+        "price": 2070.0,
+        "fetched_at": "2026-10-28T10:00:00Z",
+        "price_history": ph,
+    }
+    assumptions = Assumptions()
+    scenario_rows = [
+        {"Scenario": "Bear", "Probability": 0.25, "Value / share": float("nan")},
+        {"Scenario": "Base", "Probability": 0.50, "Value / share": float("nan")},
+        {"Scenario": "Bull", "Probability": 0.25, "Value / share": float("nan")},
+    ]
+    rec = {
+        "rating": "BUY / OVERWEIGHT",
+        "color": "#087f69",
+        "upside": float("nan"),
+        "margin_of_safety": float("nan"),
+        "summary": "Upside > +15% & strong cash flow <coverage>.",
+    }
+    pdf_bytes = generate_valuation_pdf(
+        company=company,
+        assumptions=assumptions,
+        dcf_result=None,
+        scenario_rows=scenario_rows,
+        rel_price=float("nan"),
+        blended_price=float("nan"),
+        effective_price=2450.0,
+        expected_dcf_price=2400.0,
+        rec=rec,
+    )
+    assert isinstance(pdf_bytes, bytes)
+    assert pdf_bytes.startswith(b"%PDF-1.4")
+    assert pdf_bytes.rstrip().endswith(b"%%EOF")
+    assert len(re.findall(rb'/Type\s*/Page\b', pdf_bytes)) == 2
+
+
+def test_generate_valuation_pdf_vector_fallback_when_matplotlib_absent(monkeypatch):
+    import re
+    import valuation.report_pdf as rpdf
+    monkeypatch.setattr(rpdf, "_HAS_MATPLOTLIB", False)
+    pdf_bytes = generate_valuation_pdf(
+        company={"symbol": "TLKM.JK", "name": "PT Telkom Indonesia Tbk", "price": 1960.0},
+        assumptions=Assumptions(),
+        dcf_result={"price": 2451.0},
+        scenario_rows=[
+            {"Scenario": "Bear", "Probability": 0.25, "Value / share": 1809.0},
+            {"Scenario": "Base", "Probability": 0.50, "Value / share": 2451.0},
+            {"Scenario": "Bull", "Probability": 0.25, "Value / share": 3370.0},
+        ],
+        effective_price=2451.0,
+    )
+    assert isinstance(pdf_bytes, bytes)
+    assert pdf_bytes.startswith(b"%PDF-1.4")
+    assert pdf_bytes.rstrip().endswith(b"%%EOF")
+    assert len(re.findall(rb'/Type\s*/Page\b', pdf_bytes)) == 2

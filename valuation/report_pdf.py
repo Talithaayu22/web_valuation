@@ -5,22 +5,45 @@ Generates an executive, publication-grade 2-page valuation memorandum.
 import io
 import math
 from datetime import datetime, timedelta, timezone
+from xml.sax.saxutils import escape as _xml_escape
 import pandas as pd
 import numpy as np
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+try:
+    import matplotlib
+    if matplotlib.get_backend().lower() != "agg":
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    _HAS_MATPLOTLIB = True
+except Exception:
+    matplotlib = None
+    plt = None
+    mdates = None
+    _HAS_MATPLOTLIB = False
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
+from reportlab.graphics.shapes import Drawing, Line, PolyLine, Circle, Rect, String
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, HRFlowable, Image
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 from .data import format_wib_retrieval
+
+
+def _finite_or(val, fallback=0.0) -> float:
+    """Return float(val) when finite and non-NaN; otherwise return float(fallback)."""
+    if val is None:
+        return float(fallback)
+    try:
+        if not pd.notna(val):
+            return float(fallback)
+        fval = float(val)
+        return fval if math.isfinite(fval) else float(fallback)
+    except (TypeError, ValueError):
+        return float(fallback)
 
 # Color Palette (Apple-inspired institutional palette)
 PRIMARY_COLOR = colors.HexColor("#173E37")      # Deep Forest Green
@@ -51,31 +74,41 @@ def create_price_target_line_chart(
     """
     # 1. Resolve Historical Price Series
     ph = company.get("price_history") if isinstance(company, dict) else None
+    if isinstance(ph, pd.DataFrame):
+        ph = ph["Close"].dropna() if "Close" in ph.columns else (ph.iloc[:, 0].dropna() if ph.shape[1] > 0 else pd.Series(dtype=float))
+    elif isinstance(ph, pd.Series):
+        ph = pd.to_numeric(ph, errors="coerce").dropna()
+    else:
+        ph = None
 
-    if ph is None or (isinstance(ph, (pd.Series, pd.DataFrame)) and ph.empty):
+    if ph is not None and not ph.empty:
+        dt_idx = pd.to_datetime(ph.index, errors="coerce")
+        valid_mask = pd.notna(dt_idx)
+        ph = pd.Series(ph.values[valid_mask], index=dt_idx[valid_mask])
+        if hasattr(ph.index, "tz") and ph.index.tz is not None:
+            ph = pd.Series(ph.values, index=ph.index.tz_localize(None))
+        ph = ph.sort_index()
+
+    if ph is None or ph.empty:
         # Fallback: synthesize a realistic 6-month historical trajectory ending at market_price
-        cur_p = market_price if market_price and market_price > 0 else 2000.0
-        now = datetime.now(timezone.utc)
+        cur_p = _finite_or(market_price, 2000.0)
+        if cur_p <= 0:
+            cur_p = 2000.0
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         d_idx = pd.date_range(end=now, periods=126, freq="B")
         rng = np.random.RandomState(42)
         shocks = rng.normal(0.0002, 0.012, len(d_idx))
         p_vals = cur_p / np.cumprod(1 + shocks[::-1])[::-1]
         p_vals[-1] = cur_p
         ph = pd.Series(p_vals, index=d_idx)
-    elif isinstance(ph, pd.DataFrame):
-        ph = ph["Close"].dropna() if "Close" in ph.columns else ph.iloc[:, 0].dropna()
-
-    # Ensure tz-naive dates for matplotlib compatibility
-    if hasattr(ph.index, "tz") and ph.index.tz is not None:
-        ph_idx = ph.index.tz_localize(None)
-        ph = pd.Series(ph.values, index=ph_idx)
 
     # Slice to last 9-12 months for visual sharpness
     if len(ph) > 220:
         ph = ph.iloc[-220:]
 
     cur_date = ph.index[-1]
-    cur_p = float(ph.iloc[-1]) if market_price is None or market_price <= 0 else float(market_price)
+    mp_clean = _finite_or(market_price, 0.0)
+    cur_p = float(ph.iloc[-1]) if mp_clean <= 0 else mp_clean
 
     # Scenario Target Prices & Horizons
     target_date = cur_date + timedelta(days=90)  # Projection horizon ~3-6 months visually
@@ -85,6 +118,57 @@ def create_price_target_line_chart(
         ("Base", base_price, "#1D1D1F", "#F5F5F7"),      # Dark Charcoal
         ("Bear", bear_price, "#B53D35", "#FDF2F2"),      # Muted Burgundy
     ]
+
+    if not _HAS_MATPLOTLIB:
+        # Pure-ReportLab vector historical price line chart fallback (for un-rebooted cloud containers)
+        d = Drawing(width_pt, height_pt)
+        all_p = [float(v) for v in ph.values] + [cur_p]
+        for _, tp, _, _ in scenarios:
+            tp_f = _finite_or(tp, 0.0)
+            if tp_f > 0:
+                all_p.append(tp_f)
+        y_lo, y_hi = min(all_p), max(all_p)
+        pad = (y_hi - y_lo) * 0.18 if y_hi > y_lo else max(1.0, y_lo * 0.2)
+        y0_val, y1_val = max(0.0, y_lo - pad), y_hi + pad
+
+        px_l, px_hist_r, px_targ = 48.0, width_pt - 155.0, width_pt - 102.0
+        py_b, py_t = 18.0, height_pt - 18.0
+        d.add(String(px_l, height_pt - 9, "Historical Price Trajectory & Scenario Target Price Projections", fontSize=7.5, fontName="Helvetica-Bold", fillColor=TEXT_DARK))
+
+        def _vy(val):
+            return py_b + ((val - y0_val) / max(1e-6, y1_val - y0_val)) * (py_t - py_b)
+
+        for i in range(4):
+            gv = y0_val + i * (y1_val - y0_val) / 3.0
+            gy = _vy(gv)
+            d.add(Line(px_l, gy, px_targ + 6, gy, strokeColor=BORDER_COLOR, strokeWidth=0.5, strokeDashArray=[2, 2]))
+            d.add(String(px_l - 4, gy - 2, f"Rp {gv:,.0f}", fontSize=6.0, fontName="Helvetica", textAnchor="end", fillColor=TEXT_MUTED))
+
+        n_pts = len(ph)
+        pts = []
+        for idx_i, val in enumerate(ph.values):
+            vx = px_l + (idx_i / max(1, n_pts - 1)) * (px_hist_r - px_l)
+            pts.extend([vx, _vy(float(val))])
+        if len(pts) >= 4:
+            d.add(PolyLine(pts, strokeColor=colors.HexColor("#2C423E"), strokeWidth=1.3))
+
+        cy = _vy(cur_p)
+        d.add(Line(px_l, cy, px_targ, cy, strokeColor=colors.HexColor("#8E8E93"), strokeWidth=0.75, strokeDashArray=[1.5, 2]))
+        for name, tp, col_hex, bg_hex in scenarios:
+            tp_f = _finite_or(tp, 0.0)
+            if tp_f <= 0:
+                continue
+            ty = _vy(tp_f)
+            upside = (tp_f - cur_p) / cur_p if cur_p > 0 else 0.0
+            sign = "+" if upside > 0 else ""
+            c_obj = colors.HexColor(col_hex)
+            d.add(Line(px_hist_r, cy, px_targ, ty, strokeColor=c_obj, strokeWidth=1.0, strokeDashArray=[3, 2]))
+            d.add(Circle(px_targ, ty, 2.2, fillColor=c_obj, strokeColor=c_obj))
+            d.add(Rect(px_targ + 5, ty - 6, 92, 12, rx=2.5, ry=2.5, fillColor=colors.HexColor(bg_hex), strokeColor=c_obj, strokeWidth=0.6))
+            d.add(String(px_targ + 8, ty - 2.5, f"{name}: Rp {tp_f:,.0f} ({sign}{upside:.1%})", fontSize=5.8, fontName="Helvetica-Bold", fillColor=c_obj))
+        d.width = width_pt
+        d.height = height_pt
+        return d
 
     # Convert pt to inches (1 pt = 1/72 inch)
     fig_w = width_pt / 72.0
@@ -227,8 +311,10 @@ def create_price_target_line_chart(
     plt.tight_layout(pad=0.4)
 
     buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", facecolor=fig.get_facecolor(), edgecolor="none")
-    plt.close(fig)
+    try:
+        plt.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", facecolor=fig.get_facecolor(), edgecolor="none")
+    finally:
+        plt.close(fig)
     buf.seek(0)
     img = Image(buf, width=width_pt, height=height_pt)
     img.width = width_pt
@@ -289,22 +375,23 @@ def generate_valuation_pdf(
     # Safe data resolution
     c = company or {}
     a = assumptions
-    sym = c.get("symbol", "NUSA.JK")
-    name = c.get("name", "Nusantara Operating Company")
-    sector = c.get("sector", "Operating Business")
-    industry = c.get("industry", "General Operating")
-    market_price = float(c.get("price")) if c.get("price") and pd.notna(c.get("price")) else 0.0
+    sym = _xml_escape(str(c.get("symbol", "NUSA.JK") or "NUSA.JK"))
+    name = _xml_escape(str(c.get("name", "Nusantara Operating Company") or "Nusantara Operating Company"))
+    sector = _xml_escape(str(c.get("sector", "Operating Business") or "Operating Business"))
+    industry = _xml_escape(str(c.get("industry", "General Operating") or "General Operating"))
+    market_price = _finite_or(c.get("price"), 0.0)
 
-    eff_p = float(effective_price) if effective_price and pd.notna(effective_price) else 0.0
-    exp_dcf = float(expected_dcf_price) if expected_dcf_price and pd.notna(expected_dcf_price) else (dcf_result.get("price", 0.0) if dcf_result else 0.0)
-    rel_p = float(rel_price) if rel_price and pd.notna(rel_price) else 0.0
+    eff_p = _finite_or(effective_price, 0.0)
+    dcf_base_fallback = _finite_or(dcf_result.get("price") if dcf_result else None, 0.0)
+    exp_dcf = _finite_or(expected_dcf_price, dcf_base_fallback)
+    rel_p = _finite_or(rel_price, 0.0)
 
     r_dict = rec or {"rating": "HOLD / NEUTRAL", "color": "#087F69", "upside": 0.0, "margin_of_safety": 0.15, "summary": "Valuation sits within neutral bounds."}
-    r_color = r_dict.get("color", "#087F69")
-    r_rating = r_dict.get("rating", "HOLD / NEUTRAL")
-    r_upside = r_dict.get("upside", 0.0)
-    mos = r_dict.get("margin_of_safety", 0.15)
-    r_summary = r_dict.get("summary", "Valuation reflects balanced risk/reward profile.")
+    r_color = str(r_dict.get("color") or "#087F69")
+    r_rating = _xml_escape(str(r_dict.get("rating") or "HOLD / NEUTRAL"))
+    r_upside = _finite_or(r_dict.get("upside"), 0.0)
+    mos = _finite_or(r_dict.get("margin_of_safety"), 0.15)
+    r_summary = _xml_escape(str(r_dict.get("summary") or "Valuation reflects balanced risk/reward profile."))
 
     # Extract scenario values
     scen_prices = {}
@@ -315,9 +402,9 @@ def generate_valuation_pdf(
             scen_prices[scen_name] = r.get("Value / share")
             scen_probs[scen_name] = r.get("Probability")
 
-    bear_p = scen_prices.get("Bear") or (exp_dcf * 0.8)
-    base_p = scen_prices.get("Base") or (dcf_result.get("price") if dcf_result else exp_dcf)
-    bull_p = scen_prices.get("Bull") or (exp_dcf * 1.2)
+    bear_p = _finite_or(scen_prices.get("Bear"), exp_dcf * 0.8)
+    base_p = _finite_or(scen_prices.get("Base"), dcf_base_fallback if dcf_result else exp_dcf)
+    bull_p = _finite_or(scen_prices.get("Bull"), exp_dcf * 1.2)
 
     norm_probs = a.normalized_scenario_probabilities() if hasattr(a, "normalized_scenario_probabilities") else {"Bear": 0.25, "Base": 0.50, "Bull": 0.25}
 

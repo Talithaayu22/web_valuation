@@ -219,3 +219,81 @@ def test_tri_pillar_kpi_card_compact_height_and_scoped_styling():
     assert "Relative value / share" in metric_labels
 
 
+def test_overview_pdf_and_excel_exports_visible_and_update_with_assumptions():
+    import io
+    import openpyxl
+    import re
+
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py", default_timeout=60).run()
+    assert not app.exception
+
+    # 1. Both Overview export buttons are visible
+    dl_by_key = {b.key: b for b in app.download_button if b.key}
+    assert any(k.endswith("_dl_pdf_banner") for k in dl_by_key), f"Missing PDF banner button: {list(dl_by_key)}"
+    assert any(k.endswith("_dl_excel_banner") for k in dl_by_key), f"Missing Excel banner button: {list(dl_by_key)}"
+
+    pdf_btn = next(b for k, b in dl_by_key.items() if k.endswith("_dl_pdf_banner"))
+    xl_btn = next(b for k, b in dl_by_key.items() if k.endswith("_dl_excel_banner"))
+    assert pdf_btn.label == "Download PDF Report"
+    assert xl_btn.label == "Export Excel (.xlsx)"
+
+    # 2. Verify valid PDF & Excel bytes generated without errors
+    assert app.session_state["_latest_pdf_error"] is None
+    assert app.session_state["_latest_excel_error"] is None
+    pdf_bytes_initial = app.session_state["_latest_pdf_bytes"]
+    xl_bytes_initial = app.session_state["_latest_excel_bytes"]
+
+    assert isinstance(pdf_bytes_initial, bytes) and len(pdf_bytes_initial) > 15000
+    assert pdf_bytes_initial.startswith(b"%PDF-1.4")
+    assert pdf_bytes_initial.rstrip().endswith(b"%%EOF")
+    assert len(re.findall(rb"/Type\s*/Page\b", pdf_bytes_initial)) == 2
+
+    assert isinstance(xl_bytes_initial, bytes) and xl_bytes_initial.startswith(b"PK")
+    wb_init = openpyxl.load_workbook(io.BytesIO(xl_bytes_initial), data_only=False)
+    assert len(wb_init.sheetnames) >= 5
+
+    # 3. Update assumptions -> verify both exports refresh dynamically with no stale values
+    growth_input = next(n for n in app.number_input if n.label == "Growth · years 1–3 (%)")
+    growth_input.set_value(14.0)
+    next(b for b in app.button if b.label == "Apply assumptions").click().run()
+    assert not app.exception
+
+    pdf_bytes_updated = app.session_state["_latest_pdf_bytes"]
+    xl_bytes_updated = app.session_state["_latest_excel_bytes"]
+    assert pdf_bytes_updated is not None and pdf_bytes_updated != pdf_bytes_initial
+    assert xl_bytes_updated is not None and xl_bytes_updated != xl_bytes_initial
+
+
+def test_overview_pdf_failure_shows_error_logs_traceback_and_keeps_excel_working(monkeypatch, caplog):
+    import logging
+    import valuation.report_pdf as report_pdf_mod
+
+    def _failing_pdf(*args, **kwargs):
+        raise RuntimeError("Simulated PDF render error")
+
+    monkeypatch.setattr(report_pdf_mod, "generate_valuation_pdf", _failing_pdf)
+
+    with caplog.at_level(logging.ERROR):
+        app = AppTest.from_file(Path(__file__).resolve().parents[1] / "app.py", default_timeout=30).run()
+
+    assert not app.exception
+
+    # 1. Broken PDF download button must NOT be displayed
+    dl_labels_overview = [b.label for b in app.download_button if b.key and b.key.endswith("_dl_pdf_banner")]
+    assert dl_labels_overview == []
+
+    # 2. Excel export button MUST remain visible and functional
+    xl_buttons_overview = [b for b in app.download_button if b.key and b.key.endswith("_dl_excel_banner")]
+    assert len(xl_buttons_overview) == 1
+    assert xl_buttons_overview[0].label == "Export Excel (.xlsx)"
+    assert isinstance(app.session_state["_latest_excel_bytes"], bytes)
+    assert app.session_state["_latest_excel_bytes"].startswith(b"PK")
+
+    # 3. Clear user-friendly error message displayed & traceback logged
+    error_messages = [e.value for e in app.error]
+    assert any("PDF report could not be generated" in msg and "Simulated PDF render error" in msg for msg in error_messages)
+    assert "PDF report generation failed" in caplog.text
+    assert "Simulated PDF render error" in caplog.text
+
+
+

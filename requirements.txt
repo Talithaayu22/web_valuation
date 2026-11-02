@@ -6,4 +6,6 @@ plotly>=6,<8
 openpyxl>=3.1,<4
 pytest>=8,<10
 reportlab>=4.0,<6
+matplotlib>=3.8,<4
+pillow>=10.0,<14
 curl_cffi>=0.7,<1
