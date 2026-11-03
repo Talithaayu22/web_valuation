@@ -1,0 +1,134 @@
+name: Keep Streamlit App Awake 24/7
+
+on:
+  schedule:
+    # Run every 6 hours (00:15, 06:15, 12:15, 18:15 UTC) to prevent Streamlit Community Cloud hibernation
+    - cron: "15 */6 * * *"
+  push:
+    branches:
+      - front-end-1
+      - back-end-build-3
+    paths:
+      - ".github/workflows/keep_awake.yml"
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "Optional Streamlit App URL override (comma-separated if multiple)"
+        required: false
+        default: "https://talithaayu22-web-valuation-app-front-end-1-f4t7ch.streamlit.app/"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-streamlit-awake
+  cancel-in-progress: false
+
+jobs:
+  wake-and-heartbeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DEFAULT_URLS: "https://talithaayu22-web-valuation-app-front-end-1-f4t7ch.streamlit.app/"
+      REPO_VAR_URLS: ${{ vars.STREAMLIT_APP_URLS }}
+      INPUT_URLS: ${{ github.event.inputs.app_url }}
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright Chromium
+        run: |
+          pip install --quiet playwright
+          playwright install --with-deps chromium
+
+      - name: Visit Streamlit App & Wake If Sleeping
+        run: |
+          python - <<'EOF'
+          import os
+          import sys
+          from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+          raw_urls = (
+              os.environ.get("INPUT_URLS")
+              or os.environ.get("REPO_VAR_URLS")
+              or os.environ.get("DEFAULT_URLS")
+              or ""
+          )
+          urls = [u.strip() for u in raw_urls.split(",") if u.strip()]
+          if not urls:
+              print("No Streamlit URLs configured.")
+              sys.exit(1)
+
+          wake_selectors = [
+              'button[data-testid="wakeup-button-viewer"]',
+              'button[data-testid="wakeup-button-owner"]',
+              'button:has-text("Yes, get this app back up")',
+              'button:has-text("get this app back up")',
+          ]
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              context = browser.new_context(
+                  viewport={"width": 1440, "height": 900},
+                  user_agent=(
+                      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/130.0.0.0 Safari/537.36"
+                  ),
+              )
+
+              for url in urls:
+                  print(f"=== Checking Streamlit app: {url} ===")
+                  page = context.new_page()
+                  try:
+                      page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                      page.wait_for_timeout(5000)
+
+                      # 1. Check outer page and any embedded frames for the sleep wake-up button
+                      woke_up = False
+                      for frame in [page] + list(page.frames):
+                          for sel in wake_selectors:
+                              try:
+                                  btn = frame.locator(sel).first
+                                  if btn.count() > 0 and btn.is_visible():
+                                      print(f"App is sleeping (matched {sel}) — clicking wake-up button...")
+                                      btn.click(timeout=10000)
+                                      woke_up = True
+                                      break
+                              except Exception:
+                                  pass
+                          if woke_up:
+                              break
+
+                      if woke_up:
+                          print("Waiting up to 90s for container boot and WebSocket stream...")
+                          page.wait_for_timeout(45000)
+
+                      # 2. Wait for Streamlit app container (either top-level or inside iframe)
+                      app_loaded = False
+                      for _ in range(12):
+                          for frame in [page] + list(page.frames):
+                              try:
+                                  if frame.locator('[data-testid="stAppViewContainer"], [data-testid="stApp"]').count() > 0:
+                                      app_loaded = True
+                                      break
+                              except Exception:
+                                  pass
+                          if app_loaded:
+                              break
+                          page.wait_for_timeout(5000)
+
+                      # Keep active WebSocket session alive briefly so Streamlit Cloud registers traffic
+                      page.wait_for_timeout(10000)
+                      print(f"Heartbeat complete for {url} (app_loaded={app_loaded}, woke_up={woke_up})")
+                  except PlaywrightTimeoutError as exc:
+                      print(f"Timeout while visiting {url}: {exc}")
+                  except Exception as exc:
+                      print(f"Error while visiting {url}: {exc}")
+                  finally:
+                      page.close()
+
+              browser.close()
+          EOF
