@@ -882,6 +882,152 @@ button { border-radius: 10px !important; }
     }
 }
 
+/* --- Scenario Analysis & Sensitivity: Institutional Symmetrical 5-Card Grid --- */
+.scenario-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
+    margin: 8px 0 20px;
+}
+.scenario-kpi-card {
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
+    border-radius: 14px;
+    padding: 14px 16px;
+    min-height: 122px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-sizing: border-box;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.scenario-kpi-card:hover {
+    border-color: #087F69;
+    box-shadow: 0 3px 10px rgba(8, 127, 105, 0.06);
+}
+.scenario-kpi-card-highlight {
+    border-top: 3px solid #087F69;
+}
+.scenario-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 6px;
+    min-height: 22px;
+}
+.scenario-card-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6E6E73;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.scenario-prob-badge {
+    font-size: 10.5px;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 2px 7px;
+    line-height: 1.2;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+}
+.prob-badge-neutral {
+    background: #F2F2F7;
+    color: #6E6E73;
+    border: 1px solid #E5E5EA;
+}
+.prob-badge-bear {
+    background: #FFF7ED;
+    color: #C2410C;
+    border: 1px solid #FED7AA;
+}
+.prob-badge-base {
+    background: #F0F9FF;
+    color: #0369A1;
+    border: 1px solid #BAE6FD;
+}
+.prob-badge-bull {
+    background: #F0FDF4;
+    color: #15803D;
+    border: 1px solid #BBF7D0;
+}
+.prob-badge-highlight {
+    background: #E6F4F1;
+    color: #087F69;
+    border: 1px solid #B7E1D7;
+}
+.scenario-card-value {
+    font-size: clamp(1.22rem, 1.4vw, 1.55rem);
+    font-weight: 700;
+    color: #1D1D1F;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+    margin: 4px 0 8px;
+    white-space: nowrap;
+}
+.scenario-card-value-accent {
+    color: #087F69;
+}
+.scenario-card-footer {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+}
+.scenario-delta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    border-radius: 6px;
+    padding: 3px 8px;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+.delta-pill-neutral {
+    background: #F5F5F7;
+    color: #6E6E73;
+    border: 1px solid #E5E5EA;
+}
+.delta-pill-bear {
+    background: #FDF2F2;
+    color: #DC2626;
+    border: 1px solid #FCA5A5;
+}
+.delta-pill-bull {
+    background: #ECFDF5;
+    color: #059669;
+    border: 1px solid #A7F3D0;
+}
+.delta-pill-highlight {
+    background: #E6F4F1;
+    color: #087F69;
+    border: 1px solid #B7E1D7;
+}
+@media (max-width: 1100px) {
+    .scenario-kpi-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+@media (max-width: 720px) {
+    .scenario-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 480px) {
+    .scenario-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Unified Section Heading for 50:50 Bridge & Terminal Cards */
 .dcf-panel-heading {
     font-size: 1.05rem;
@@ -1414,6 +1560,11 @@ div[data-testid="stTabs"] > div[data-baseweb="tab-list"] {
     border-radius: 10px !important;
     border: 1px solid #E5E5EA !important;
     gap: 3px !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+}
+div[data-testid="stTabs"] > div[data-baseweb="tab-list"]::-webkit-scrollbar {
+    display: none !important;
 }
 div[data-testid="stTabs"] [data-baseweb="tab-border"],
 div[data-testid="stTabs"] [data-baseweb="tab-highlight"] {
@@ -1421,13 +1572,21 @@ div[data-testid="stTabs"] [data-baseweb="tab-highlight"] {
 }
 div[data-testid="stTabs"] button[data-baseweb="tab"] {
     border-radius: 8px !important;
-    padding: 6px 14px !important;
+    padding: 6px 11px !important;
     font-size: 12px !important;
     font-weight: 500 !important;
     color: #6E6E73 !important;
     background: transparent !important;
     border: none !important;
     transition: all 0.15s ease !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+}
+@media (max-width: 1280px) {
+    div[data-testid="stTabs"] button[data-baseweb="tab"] {
+        padding: 5px 8px !important;
+        font-size: 11.5px !important;
+    }
 }
 div[data-testid="stTabs"] button[data-baseweb="tab"]:hover {
     color: #1D1D1F !important;
@@ -1780,11 +1939,11 @@ with valuation_lab_tab:
         unsafe_allow_html=True,
     )
     data_tab, peers_tab, assumptions_tab, analyst_review_tab, dcf_tab, scenario_tab, final_interp_tab = st.tabs([
-        "Company & data review",
+        "Company & data",
         "Comparable peers",
         "Valuation assumptions",
         "Analyst review",
-        "DCF & relative valuation",
+        "DCF & relative",
         "Scenario & sensitivity",
         "Final interpretation",
     ])
@@ -3453,8 +3612,8 @@ with overview:
                                 labTab.click();
                                 setTimeout(() => {
                                     const subTabs = Array.from(parentDoc.querySelectorAll('button[data-testid="stTab"], [role="tab"]'));
-                                    const targetName = assumpBtn ? "Valuation assumptions" : "Analyst review";
-                                    const subTarget = subTabs.find(t => t.innerText && t.innerText.includes(targetName));
+                                    const targetName = assumpBtn ? "valuation assumptions" : "analyst review";
+                                    const subTarget = subTabs.find(t => t.innerText && t.innerText.toLowerCase().includes(targetName));
                                     if (subTarget) {
                                         subTarget.click();
                                     }
@@ -4420,28 +4579,82 @@ with scenario_tab:
         "alongside 2D sensitivity to WACC and terminal growth."
     )
     if result:
-        # ── SCENARIO KPI CARDS ──
-        sc_k1, sc_k2, sc_k3, sc_k4, sc_k5 = st.columns(5)
-        sc_k1.metric("Observed Market Price", fmt_idr(price, default="N/A"), "Reference Quote")
-        sc_k2.metric(
-            "Bear Case Target",
-            fmt_idr(bear_p, default="N/A"),
-            f"{((bear_p / price - 1.0) if (bear_p and price and price > 0) else 0.0):+.1%} vs. Market ({norm_probs.get('Bear', 0.25):.0%} prob)",
-        )
-        sc_k3.metric(
-            "Base Case Target",
-            fmt_idr(base_dcf_price, default="N/A"),
-            f"{((base_dcf_price / price - 1.0) if (base_dcf_price and price and price > 0) else 0.0):+.1%} vs. Market ({norm_probs.get('Base', 0.50):.0%} prob)",
-        )
-        sc_k4.metric(
-            "Bull Case Target",
-            fmt_idr(bull_p, default="N/A"),
-            f"{((bull_p / price - 1.0) if (bull_p and price and price > 0) else 0.0):+.1%} vs. Market ({norm_probs.get('Bull', 0.25):.0%} prob)",
-        )
-        sc_k5.metric(
-            "Expected (Weighted) DCF",
-            fmt_idr(expected_dcf_price, default="N/A"),
-            f"{((expected_dcf_price / price - 1.0) if (expected_dcf_price and price and price > 0) else 0.0):+.1%} vs. Market",
+        # ── SCENARIO KPI CARDS (INSTITUTIONAL SYMMETRICAL GRID) ──
+        bear_prob_pct = f"{norm_probs.get('Bear', 0.25):.0%}"
+        base_prob_pct = f"{norm_probs.get('Base', 0.50):.0%}"
+        bull_prob_pct = f"{norm_probs.get('Bull', 0.25):.0%}"
+
+        bear_delta_val = ((bear_p / price - 1.0) if (bear_p and price and price > 0) else 0.0)
+        base_delta_val = ((base_dcf_price / price - 1.0) if (base_dcf_price and price and price > 0) else 0.0)
+        bull_delta_val = ((bull_p / price - 1.0) if (bull_p and price and price > 0) else 0.0)
+        exp_delta_val = ((expected_dcf_price / price - 1.0) if (expected_dcf_price and price and price > 0) else 0.0)
+
+        bear_arrow = "&darr;" if bear_delta_val < 0 else "&uarr;"
+        base_arrow = "&darr;" if base_delta_val < 0 else "&uarr;"
+        bull_arrow = "&darr;" if bull_delta_val < 0 else "&uarr;"
+        exp_arrow = "&darr;" if exp_delta_val < 0 else "&uarr;"
+
+        bear_pill_class = "delta-pill-bear" if bear_delta_val < 0 else "delta-pill-bull"
+        base_pill_class = "delta-pill-bear" if base_delta_val < 0 else "delta-pill-bull"
+        bull_pill_class = "delta-pill-bear" if bull_delta_val < 0 else "delta-pill-bull"
+        exp_pill_class = "delta-pill-bear" if exp_delta_val < 0 else "delta-pill-highlight"
+
+        st.markdown(
+            f"""
+            <div class="scenario-kpi-grid">
+                <div class="scenario-kpi-card">
+                    <div class="scenario-card-header">
+                        <span class="scenario-card-label">Observed Market</span>
+                        <span class="scenario-prob-badge prob-badge-neutral">Benchmark</span>
+                    </div>
+                    <div class="scenario-card-value">{fmt_idr(price, default="N/A")}</div>
+                    <div class="scenario-card-footer">
+                        <span class="scenario-delta-pill delta-pill-neutral">Reference Quote</span>
+                    </div>
+                </div>
+                <div class="scenario-kpi-card">
+                    <div class="scenario-card-header">
+                        <span class="scenario-card-label">Bear Case</span>
+                        <span class="scenario-prob-badge prob-badge-bear">{bear_prob_pct} prob</span>
+                    </div>
+                    <div class="scenario-card-value">{fmt_idr(bear_p, default="N/A")}</div>
+                    <div class="scenario-card-footer">
+                        <span class="scenario-delta-pill {bear_pill_class}">{bear_arrow} {bear_delta_val:+.1%} vs. Market</span>
+                    </div>
+                </div>
+                <div class="scenario-kpi-card">
+                    <div class="scenario-card-header">
+                        <span class="scenario-card-label">Base Case</span>
+                        <span class="scenario-prob-badge prob-badge-base">{base_prob_pct} prob</span>
+                    </div>
+                    <div class="scenario-card-value">{fmt_idr(base_dcf_price, default="N/A")}</div>
+                    <div class="scenario-card-footer">
+                        <span class="scenario-delta-pill {base_pill_class}">{base_arrow} {base_delta_val:+.1%} vs. Market</span>
+                    </div>
+                </div>
+                <div class="scenario-kpi-card">
+                    <div class="scenario-card-header">
+                        <span class="scenario-card-label">Bull Case</span>
+                        <span class="scenario-prob-badge prob-badge-bull">{bull_prob_pct} prob</span>
+                    </div>
+                    <div class="scenario-card-value">{fmt_idr(bull_p, default="N/A")}</div>
+                    <div class="scenario-card-footer">
+                        <span class="scenario-delta-pill {bull_pill_class}">{bull_arrow} {bull_delta_val:+.1%} vs. Market</span>
+                    </div>
+                </div>
+                <div class="scenario-kpi-card scenario-kpi-card-highlight">
+                    <div class="scenario-card-header">
+                        <span class="scenario-card-label">Expected DCF</span>
+                        <span class="scenario-prob-badge prob-badge-highlight">Weighted</span>
+                    </div>
+                    <div class="scenario-card-value scenario-card-value-accent">{fmt_idr(expected_dcf_price, default="N/A")}</div>
+                    <div class="scenario-card-footer">
+                        <span class="scenario-delta-pill {exp_pill_class}">{exp_arrow} {exp_delta_val:+.1%} vs. Market</span>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
         sc_col_left, sc_col_right = st.columns([1.05, 1], gap="medium")
@@ -4568,7 +4781,7 @@ with scenario_tab:
                         const btn = e.target.closest('.st-key-btn_edit_scenario_drivers button');
                         if (btn) {
                             const tabs = Array.from(parentDoc.querySelectorAll('button[data-testid="stTab"], [role="tab"]'));
-                            const targetTab = tabs.find(t => t.innerText && t.innerText.includes("Valuation assumptions"));
+                            const targetTab = tabs.find(t => t.innerText && t.innerText.toLowerCase().includes("valuation assumptions"));
                             if (targetTab) {
                                 targetTab.click();
                                 let attempts = 0;
