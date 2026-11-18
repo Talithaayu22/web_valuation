@@ -4889,3 +4889,10 @@ with st.sidebar:
         st.success("Cache cleared. Load the ticker again to fetch new data.")
 
 st.caption("NUSA / IDX VALUATION LAB    ·    IDR billions unless stated    ·    Institutional Equity Research Workspace")
+
+if hasattr(st, "fragment"):
+    @st.fragment(run_every=timedelta(minutes=10))
+    def _keep_alive_heartbeat() -> None:
+        st.session_state["_last_heartbeat_utc"] = datetime.now(timezone.utc).isoformat()
+
+    _keep_alive_heartbeat()

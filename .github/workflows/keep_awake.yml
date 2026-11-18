@@ -2,8 +2,8 @@ name: Keep Streamlit App Awake 24/7
 
 on:
   schedule:
-    # Run every 6 hours (00:15, 06:15, 12:15, 18:15 UTC) to prevent Streamlit Community Cloud hibernation
-    - cron: "15 */6 * * *"
+    # Run every 30 minutes at :07 and :37 (avoids top-of-hour GitHub cron congestion)
+    - cron: "7,37 * * * *"
   push:
     branches:
       - front-end-1
@@ -15,7 +15,7 @@ on:
       app_url:
         description: "Optional Streamlit App URL override (comma-separated if multiple)"
         required: false
-        default: "https://talithaayu22-web-valuation-app-front-end-1-f4t7ch.streamlit.app/"
+        default: "https://idxvaluation.streamlit.app/"
 
 permissions:
   contents: read
@@ -27,9 +27,9 @@ concurrency:
 jobs:
   wake-and-heartbeat:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     env:
-      DEFAULT_URLS: "https://talithaayu22-web-valuation-app-front-end-1-f4t7ch.streamlit.app/"
+      DEFAULT_URLS: "https://idxvaluation.streamlit.app/"
       REPO_VAR_URLS: ${{ vars.STREAMLIT_APP_URLS }}
       INPUT_URLS: ${{ github.event.inputs.app_url }}
     steps:
@@ -38,10 +38,21 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Playwright Chromium
+      - name: Cache Playwright Chromium Binaries
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-v1
+
+      - name: Install Playwright & Chromium
         run: |
           pip install --quiet playwright
-          playwright install --with-deps chromium
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
+            playwright install --with-deps chromium
+          else
+            playwright install-deps chromium
+          fi
 
       - name: Visit Streamlit App & Wake If Sleeping
         run: |
@@ -56,7 +67,7 @@ jobs:
               or os.environ.get("DEFAULT_URLS")
               or ""
           )
-          urls = [u.strip() for u in raw_urls.split(",") if u.strip()]
+          urls = [u.strip().rstrip("/") + "/" for u in raw_urls.split(",") if u.strip()]
           if not urls:
               print("No Streamlit URLs configured.")
               sys.exit(1)
@@ -67,6 +78,9 @@ jobs:
               'button:has-text("Yes, get this app back up")',
               'button:has-text("get this app back up")',
           ]
+          app_selectors = '[data-testid="stAppViewContainer"], [data-testid="stApp"]'
+
+          all_succeeded = True
 
           with sync_playwright() as p:
               browser = p.chromium.launch(headless=True)
@@ -80,10 +94,19 @@ jobs:
               )
 
               for url in urls:
+                  inner_url = url.rstrip("/") + "/~/+/"
+                  health_url = url.rstrip("/") + "/~/+/_stcore/health"
                   print(f"=== Checking Streamlit app: {url} ===")
                   page = context.new_page()
                   try:
-                      page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                      resp = page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                      status_code = resp.status if resp else 0
+                      print(f"Initial navigation status={status_code} final_url={page.url} title={page.title()!r}")
+                      if status_code >= 400:
+                          print(f"ERROR: {url} returned HTTP {status_code}")
+                          all_succeeded = False
+                          continue
+
                       page.wait_for_timeout(5000)
 
                       # 1. Check outer page and any embedded frames for the sleep wake-up button
@@ -102,33 +125,70 @@ jobs:
                           if woke_up:
                               break
 
-                      if woke_up:
-                          print("Waiting up to 90s for container boot and WebSocket stream...")
-                          page.wait_for_timeout(45000)
-
-                      # 2. Wait for Streamlit app container (either top-level or inside iframe)
+                      # 2. Poll up to 120s for Streamlit app container to mount
                       app_loaded = False
-                      for _ in range(12):
+                      for attempt in range(24):
                           for frame in [page] + list(page.frames):
                               try:
-                                  if frame.locator('[data-testid="stAppViewContainer"], [data-testid="stApp"]').count() > 0:
+                                  if frame.locator(app_selectors).count() > 0:
                                       app_loaded = True
                                       break
                               except Exception:
                                   pass
                           if app_loaded:
                               break
+                          # Also check wake button in case it rendered late
+                          if not woke_up:
+                              for frame in [page] + list(page.frames):
+                                  for sel in wake_selectors:
+                                      try:
+                                          btn = frame.locator(sel).first
+                                          if btn.count() > 0 and btn.is_visible():
+                                              print(f"App is sleeping on attempt {attempt + 1} (matched {sel}) — clicking wake-up button...")
+                                              btn.click(timeout=10000)
+                                              woke_up = True
+                                              break
+                                      except Exception:
+                                          pass
+                          # Halfway through, if outer iframe hasn't mounted stAppViewContainer yet, open /~/+/ directly
+                          if attempt == 8 and not app_loaded:
+                              print(f"Navigating directly to inner Streamlit endpoint: {inner_url}")
+                              try:
+                                  page.goto(inner_url, wait_until="domcontentloaded", timeout=60000)
+                              except Exception as nav_exc:
+                                  print(f"Inner navigation note: {nav_exc}")
                           page.wait_for_timeout(5000)
 
-                      # Keep active WebSocket session alive briefly so Streamlit Cloud registers traffic
-                      page.wait_for_timeout(10000)
-                      print(f"Heartbeat complete for {url} (app_loaded={app_loaded}, woke_up={woke_up})")
+                      # 3. Verify /~/+/_stcore/health endpoint using authenticated browser cookies
+                      health_ok = False
+                      try:
+                          h_resp = context.request.get(health_url, timeout=15000)
+                          health_text = h_resp.text().strip()
+                          health_ok = (h_resp.status == 200 and health_text.lower() == "ok")
+                          print(f"Health check {health_url}: status={h_resp.status} body={health_text!r}")
+                      except Exception as h_exc:
+                          print(f"Health check warning: {h_exc}")
+
+                      # Keep active WebSocket session alive briefly so Streamlit Cloud records viewer session
+                      page.wait_for_timeout(15000)
+                      print(
+                          f"Heartbeat summary for {url}: "
+                          f"app_loaded={app_loaded}, health_ok={health_ok}, woke_up={woke_up}"
+                      )
+                      if not (app_loaded or health_ok):
+                          print(f"ERROR: Streamlit app container did not load for {url}")
+                          all_succeeded = False
                   except PlaywrightTimeoutError as exc:
                       print(f"Timeout while visiting {url}: {exc}")
+                      all_succeeded = False
                   except Exception as exc:
                       print(f"Error while visiting {url}: {exc}")
+                      all_succeeded = False
                   finally:
                       page.close()
 
               browser.close()
+
+          if not all_succeeded:
+              sys.exit(1)
           EOF
